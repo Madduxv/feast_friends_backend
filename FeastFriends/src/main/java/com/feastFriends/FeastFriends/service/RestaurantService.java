@@ -10,21 +10,21 @@ import org.springframework.stereotype.Service;
 public class RestaurantService {
   
   private List<Restaurant> restaurants = new ArrayList<>();
-  private String requestedGenre = new String(""); 
+  private List<String> requestedGenres = new ArrayList<>();
 
-  public void addRestaurant(Restaurant restaurant) {
-    restaurants.add(restaurant);
-  }
-
-  public List<Restaurant> getRestaurants() {
-    return restaurants;
-  }
+  // public void addRestaurant(Restaurant restaurant) {
+  //   restaurants.add(restaurant);
+  // }
+  //
+  // public List<Restaurant> getRestaurants() {
+  //   return restaurants;
+  // }
   
-  public void setRequestedGenre(String genre) {
-    requestedGenre = genre;
+  public void addRequestedGenre(String genre) {
+    requestedGenres.add(genre);
   }
 
-  public String getRequestedGenre() {
-    return requestedGenre;
+  public List getRequestedGenres() {
+    return requestedGenres;
   }
 }

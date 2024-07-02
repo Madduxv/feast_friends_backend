@@ -6,20 +6,23 @@ import com.feastFriends.feastFriends.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
-@RequestMapping("/cards")
+@RequestMapping("/api")
 public class RestaurantController {
 
+  @Autowired
   private RestaurantService restaurantService;
 
   @PostMapping("/request_genre")
-  public void requestGenre(@RequestBody String genre) {
-    restaurantService.setRequestedGenre(genre);
+  public String requestGenre(@RequestBody String genre) {
+    restaurantService.addRequestedGenre(genre);
+    return genre;
   }
 
-  @GetMapping("/requested_restaurants")
-  public String getGenre() {
-    return restaurantService.getRequestedGenre();
+  @GetMapping("/requested_genre")
+  public List getGenre() {
+    return restaurantService.getRequestedGenres();
   }
-
 }

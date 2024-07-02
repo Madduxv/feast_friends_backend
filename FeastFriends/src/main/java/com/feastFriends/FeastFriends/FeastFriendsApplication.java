@@ -1,4 +1,4 @@
-package com.feastFriends.FeastFriends;
+package com.feastFriends.feastFriends;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -33,4 +33,9 @@ public class RestaurantController {
   public List getAllRestaurants() {
     return restaurantService.getAllRestaurants();
   }
+  @GetMapping("/clear_genres")
+  public String clearRequestedGenres() {
+    restaurantService.clearRequestedGenres();
+    return "Cleared requested Genres";
+  }
 }

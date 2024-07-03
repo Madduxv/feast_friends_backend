@@ -51,4 +51,8 @@ public class RestaurantService {
   public List getRequestedGenres() {
     return requestedGenres;
   }
+
+  public void clearRequestedGenres() {
+    requestedGenres.clear();
+  }
 }

@@ -1,0 +1,80 @@
+{
+  "restaurants": [
+    {
+      "name":"Mcdonald's",
+      "genre":"AMERICAN"
+    },
+    {
+      "name":"Burger King",
+      "genre":"AMERICAN"
+    },
+    {
+      "name":"Texas Roadhouse",
+      "genre":"AMERICAN"
+    },
+    {
+      "name":"Walk-Ons",
+      "genre":"AMERICAN"
+    },
+    {
+      "name":"Mr. Poboys",
+      "genre":"AMERICAN"
+    },
+    {
+      "name":"Rotolos",
+      "genre":"AMERICAN"
+    },
+
+    {
+      "name":"Copelands",
+      "genre":"CAJUN"
+    },
+    {
+      "name":"Boudreaux and Thibodeaux",
+      "genre":"CAJUN"
+    },
+    {
+      "name":"Popeyes",
+      "genre":"CAJUN"
+    },
+
+    {
+      "name":"Zen",
+      "genre":"JAPANESE"
+    },
+    {
+      "name":"OSAKA",
+      "genre":"JAPANESE"
+    },
+    {
+      "name":"Ichiban",
+      "genre":"JAPANESE"
+    },
+
+    {
+      "name":"Chinese Gormet",
+      "genre":"CHINESE"
+    },
+    {
+      "name":"Grand Buffet",
+      "genre":"CHINESE"
+    },
+    {
+      "name":"Hong Kong",
+      "genre":"CHINESE"
+    },
+
+    {
+      "name":"LA CASA",
+      "genre":"MEXICAN"
+    },
+    {
+      "name":"HERADURRA",
+      "genre":"MEXICAN"
+    },
+    {
+      "name":"Taco Truck",
+      "genre":"MEXICAN"
+    }
+  ]
+}

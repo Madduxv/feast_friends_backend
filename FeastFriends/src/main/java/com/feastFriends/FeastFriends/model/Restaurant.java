@@ -4,12 +4,24 @@ public class Restaurant {
   private String name;
   private String genre;
 
-  public void addRestaurant(String name, String genre) {
+  public void setRestaurant(String name, String genre) {
     this.name = name;
     this.genre = genre;
   }
 
-  public String getRestaurant() {
+  public void setName(String name) {
+    this.name = name;
+  }
+
+  public String getName() {
     return name;
+  }
+
+  public void setGenre(String genre) {
+    this.genre = genre;
+  }
+
+  public String getGenre() {
+    return genre;
   }
 }

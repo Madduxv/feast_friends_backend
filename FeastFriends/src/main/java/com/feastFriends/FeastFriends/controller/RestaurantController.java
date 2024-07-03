@@ -25,4 +25,12 @@ public class RestaurantController {
   public List getGenre() {
     return restaurantService.getRequestedGenres();
   }
+  @GetMapping("/requested_restaurants")
+  public List getRequestedRestaurants() {
+    return restaurantService.findRestaurantsWithRequestedGenre();
+  }
+  @GetMapping("/all_restaurants")
+  public List getAllRestaurants() {
+    return restaurantService.getAllRestaurants();
+  }
 }

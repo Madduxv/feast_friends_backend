@@ -44,11 +44,12 @@ public class RestaurantService {
     .filter(restaurant -> genres.contains(restaurant.getGenre()))
     .collect(Collectors.toList());
   }
+
   public void addRequestedGenre(String genre) {
     requestedGenres.add(genre);
   }
 
-  public List getRequestedGenres() {
+  public List<String> getRequestedGenres() {
     return requestedGenres;
   }
 

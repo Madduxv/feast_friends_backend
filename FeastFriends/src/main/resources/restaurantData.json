@@ -4,6 +4,14 @@
     "genre":"AMERICAN"
   },
   {
+    "name":"Chick-Fil-A",
+    "genre":"AMERICAN"
+  },
+  {
+    "name":"Subway",
+    "genre":"AMERICAN"
+  },
+  {
     "name":"Burger King",
     "genre":"AMERICAN"
   },
@@ -19,9 +27,22 @@
     "name":"Mr. Poboys",
     "genre":"AMERICAN"
   },
+
   {
     "name":"Rotolos",
-    "genre":"AMERICAN"
+    "genre":"ITALIAN"
+  },
+  {
+    "name":"Domino's",
+    "genre":"ITALIAN"
+  },
+  {
+    "name":"Papa John's",
+    "genre":"ITALIAN"
+  },
+  {
+    "name":"Olive Garden",
+    "genre":"ITALIAN"
   },
 
   {
@@ -69,6 +90,10 @@
   },
   {
     "name":"HERADURRA",
+    "genre":"MEXICAN"
+  },
+  {
+    "name":"El Paso",
     "genre":"MEXICAN"
   },
   {

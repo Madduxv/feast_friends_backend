@@ -34,7 +34,7 @@ public class RestaurantService {
   // public void addRestaurant(Restaurant restaurant) {
   //   restaurants.add(restaurant);
   // }
-  //
+
   public List<Restaurant> getAllRestaurants() {
     return restaurants;
   }

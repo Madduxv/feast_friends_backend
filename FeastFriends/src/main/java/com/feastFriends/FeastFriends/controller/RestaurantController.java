@@ -1,8 +1,8 @@
 package com.feastFriends.feastFriends.controller;
-
 // import com.feastFriends.feastFriends.model;
 import com.feastFriends.feastFriends.service.*;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,26 +16,27 @@ public class RestaurantController {
   private RestaurantService restaurantService;
 
   @PostMapping("/request_genre")
-  public String requestGenre(@RequestBody String genre) {
+  public ResponseEntity<String> requestGenre(@RequestBody String genre) {
     restaurantService.addRequestedGenre(genre);
-    return genre;
+    return ResponseEntity.ok("Requesting " + genre);
   }
 
-  @GetMapping("/requested_genre")
-  public List getGenre() {
-    return restaurantService.getRequestedGenres();
+  @GetMapping("/requested_genres")
+  public ResponseEntity<List<String>> getGenre() {
+    return ResponseEntity.ok(restaurantService.getRequestedGenres());
   }
   @GetMapping("/requested_restaurants")
-  public List getRequestedRestaurants() {
-    return restaurantService.findRestaurantsWithRequestedGenre();
+  public ResponseEntity<List> getRequestedRestaurants() {
+    return ResponseEntity.ok(restaurantService.findRestaurantsWithRequestedGenre());
   }
   @GetMapping("/all_restaurants")
-  public List getAllRestaurants() {
-    return restaurantService.getAllRestaurants();
+  public ResponseEntity<List> getAllRestaurants() {
+    return ResponseEntity.ok(restaurantService.getAllRestaurants());
   }
-  @GetMapping("/clear_genres")
-  public String clearRequestedGenres() {
+
+  @DeleteMapping("/clear_genres")
+  public ResponseEntity<String> clearRequestedGenres() {
     restaurantService.clearRequestedGenres();
-    return "Cleared requested Genres";
+    return ResponseEntity.ok("Cleared requested Genres");
   }
 }

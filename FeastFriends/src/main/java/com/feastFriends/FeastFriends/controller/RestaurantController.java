@@ -20,7 +20,12 @@ public class RestaurantController {
     restaurantService.addRequestedGenre(genre);
     return ResponseEntity.ok("Requesting " + genre);
   }
-
+  @PostMapping("/clear_genres")
+  public ResponseEntity<String> clearRequestedGenres() {
+    restaurantService.clearRequestedGenres();
+    return ResponseEntity.ok("Cleared requested Genres");
+  }
+  
   @GetMapping("/requested_genres")
   public ResponseEntity<List<String>> getGenre() {
     return ResponseEntity.ok(restaurantService.getRequestedGenres());
@@ -34,9 +39,4 @@ public class RestaurantController {
     return ResponseEntity.ok(restaurantService.getAllRestaurants());
   }
 
-  @DeleteMapping("/clear_genres")
-  public ResponseEntity<String> clearRequestedGenres() {
-    restaurantService.clearRequestedGenres();
-    return ResponseEntity.ok("Cleared requested Genres");
-  }
 }

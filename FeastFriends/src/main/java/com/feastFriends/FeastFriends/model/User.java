@@ -1,50 +1,48 @@
 package com.feastFriends.feastFriends.model;
 
-import jakarta.persistence.*;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
 
-@Entity
 public class User {
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long ID;
+  private Long id;
   private String name;
-  @ManyToMany
-  @JoinTable(
-    name = "user_friends",
-    joinColumns = @JoinColumn(name = "user_id"),
-    inverseJoinColumns = @JoinColumn(name = "friend_id")
-  )
-  private Set<User> friends = new HashSet<>();
+  private List<Friend> friends = new ArrayList<>();
 
-  public Long getUserID() {
-    return ID;
-  }
+  public User() {}
 
-  public String getUserName() {
-    return name;
-  }
-
-  public Set<User> getUserFriends() {
-    return friends; 
-  }
-
-  // public void addUserFriend(String friend) {
-  //   friends.add(friend);
-  // }
-
-  public void setUserFriends(Set<User> friends) {
+  public User(Long id, String name, List<Friend> friends) {
+    this.id = id;
+    this.name = name;
     this.friends = friends;
   }
 
-  public void setUserName(String name) {
+  public Long getID() {
+    return id;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public List<Friend> getFriends() {
+    return friends; 
+  }
+  
+  public void setFriends(List<Friend> friends) {
+    this.friends = friends;
+  }
+
+  public void addFriend(Friend friend) {
+    this.friends.add(friend);
+  }
+
+  public void setName(String name) {
     this.name = name;
   }
 
-  public void setUserID(Long ID) {
-    this.ID = ID;
+  public void setID(Long id) {
+    this.id = id;
   }
 
 }

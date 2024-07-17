@@ -8,17 +8,42 @@ import java.util.ArrayList;
 import java.util.List;
 import java.io.File;
 import java.io.IOException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
+@Service
 public class UserService {
 
-  ObjectMapper objectMapper = new ObjectMapper();
-  File file = new File("/users.json");
+  ObjectMapper objectMapper;
+  private File file;
+  private List<User> users;
 
-  // generate id for new user
+  public UserService(@Value("${file.path}") String filePath) {
+    this.objectMapper = new ObjectMapper();
+    this.file = new File(filePath);
+    this.users = deserialize();
+  }
 
-  // get user by id 
+  private List<User> deserialize() {
+    try {
+      if (file.exists()) {
+        return objectMapper.readValue(file, new TypeReference<List<User>>() {});
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    return new ArrayList<>();
+  }
+
+  private void serialize() {
+    try {
+      objectMapper.writeValue(file, users);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
  
-  private static User findUserByName(List<User> users, String name) {
+  public User findUserByName(String name) {
     for (User user : users) {
       if (user.getName().equals(name)) {
         return user;
@@ -27,28 +52,24 @@ public class UserService {
     return null;
   }
 
-  public void addUser(Long ID, String Name) {
+  public void addUser(Long id, String name) {
     try {
-      List<User> users = objectMapper.readValue(file, new TypeReference<List<User>>() {});
-      if (findUserByName(users, Name) == null) {
+      users = deserialize(); // Refresh users list
+      if (findUserByName(name) == null) {
         List<Friend> emptyList = new ArrayList<>();
-        User user = new User(ID, Name, emptyList); 
-        objectMapper.writeValue(file, user);
+        User user = new User(id, name, emptyList);
+        users.add(user);
+        serialize(); // Serialize the updated users list
       }
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
   
-  public List<Friend> getFriends(String user, Long ID) {
-    try {
-      List<User> users = objectMapper.readValue(file, new TypeReference<List<User>>() {});
-      User targetUser = findUserByName(users, user);
-      if (targetUser != null) {
-        return targetUser.getFriends();
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
+  public List<Friend> getFriends(String name) {
+    User targetUser = findUserByName(name);
+    if (targetUser != null) {
+      return targetUser.getFriends();
     }
     return null;
   }
@@ -56,7 +77,7 @@ public class UserService {
   public void addFriend(String user, Long ID, String friend) {
     try {
       List<User> users = objectMapper.readValue(file, new TypeReference<List<User>>() {});
-      User targetUser = findUserByName(users, user);
+      User targetUser = findUserByName(user);
       if (targetUser != null) {
         targetUser.addFriend(new Friend(ID, friend));
       }
@@ -65,6 +86,13 @@ public class UserService {
       e.printStackTrace();
     }
   }
+
+  public List<User> getAllUsers() {
+    return users;
+  }
+  
   // remove friend
+  
+  // generate id for new user
   
 }

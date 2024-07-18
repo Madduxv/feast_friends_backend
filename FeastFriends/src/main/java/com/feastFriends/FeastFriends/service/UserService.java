@@ -80,6 +80,7 @@ public class UserService {
       User targetUser = findUserByName(user);
       if (targetUser != null) {
         targetUser.addFriend(new Friend(friend));
+        findUserByName(friend).addFriend(new Friend(user)); // this shouldn't fail because the "friend" is calling it
       }
       serialize();
     } catch (Exception e) {

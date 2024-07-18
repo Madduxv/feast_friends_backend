@@ -52,12 +52,12 @@ public class UserService {
     return null;
   }
 
-  public void addUser(Long id, String name) {
+  public void addUser(String name) {
     try {
       users = deserialize(); // Refresh users list
       if (findUserByName(name) == null) {
         List<Friend> emptyList = new ArrayList<>();
-        User user = new User(id, name, emptyList);
+        User user = new User(name, emptyList);
         users.add(user);
         serialize(); // Serialize the updated users list
       }
@@ -74,25 +74,24 @@ public class UserService {
     return null;
   }
 
-  public void addFriend(String user, Long ID, String friend) {
+  public void addFriend(String user, String friend) {
     try {
-      List<User> users = objectMapper.readValue(file, new TypeReference<List<User>>() {});
+      users = deserialize();
       User targetUser = findUserByName(user);
       if (targetUser != null) {
-        targetUser.addFriend(new Friend(ID, friend));
+        targetUser.addFriend(new Friend(friend));
       }
-      objectMapper.writeValue(file, users);
-    } catch (IOException e) {
+      serialize();
+    } catch (Exception e) {
       e.printStackTrace();
     }
   }
 
   public List<User> getAllUsers() {
+    users = deserialize();
     return users;
   }
   
   // remove friend
-  
-  // generate id for new user
   
 }

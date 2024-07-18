@@ -38,10 +38,12 @@ public class RestaurantService {
   public List<Restaurant> getAllRestaurants() {
     return restaurants;
   }
-  public List<Restaurant> findRestaurantsWithRequestedGenre() {
-    List<String> genres = requestedGenres;
+
+  // gotta give the functional bros some love
+  public List<String> findRestaurantsWithRequestedGenre() {
     return restaurants.stream()
-    .filter(restaurant -> genres.contains(restaurant.getGenre()))
+    .filter(restaurant -> requestedGenres.contains(restaurant.getGenre()))
+    .map(Restaurant::getName)
     .collect(Collectors.toList());
   }
 

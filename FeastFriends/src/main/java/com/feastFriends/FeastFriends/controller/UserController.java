@@ -46,7 +46,6 @@ public class UserController {
   @PostMapping("/add_friend")
   public ResponseEntity<String> addFriend(@RequestBody FriendRequest request) {
     userService.addFriend(request.getUser(), request.getFriendName());
-    userService.addFriend(request.getFriendName(), request.getUser());
     return ResponseEntity.ok("Friend Added");
   }
 }

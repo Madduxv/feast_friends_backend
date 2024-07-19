@@ -4,10 +4,13 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.feastFriends.feastFriends.service.RestaurantService;
+
 import java.util.*;
 
 
@@ -17,6 +20,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private final Map<WebSocketSession, String> sessionGroupMap = new HashMap<>();
   private final Map<String, List<WebSocketSession>> groupSessionsMap = new HashMap<>();
   private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
+
+  @Autowired
+  RestaurantService restaurantService = new RestaurantService();
 
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -33,23 +39,30 @@ public class WebSocketHandler extends TextWebSocketHandler {
     //              {"action": "addGenre", "content": "AMERICAN"}
     //              {"action": "addGenre", "content": "JAPANESE"}
     //              {"action": "getRequestedGenres", "content": "exampleGroup"}
+    //              {"action": "getRequestedRestaurants", "content": "exampleGroup"}
 
     Map<String, String> data = parsePayload(payload);
     String action = data.get("action");
+    String content = data.get("content");
 
-    if ("join".equals(action)) {
-      String groupName = data.get("content");
-      joinGroup(session, groupName);
-    } else if ("message".equals(action)) {
-      String content = data.get("content");
-      broadcastMessage(session, content);
-    } else if ("addGenre".equals(action)) {
-      String genre = data.get("content");
-      addRequestedGenre(session, genre);
-    } else if ("getRequestedGenres".equals(action)) {
-      String groupName = data.get("content");
-      List <String> genres = getRequestedGenresForGroup(groupName);
-      sendMessage(session, genres.toString());
+    switch (action) {
+      case "join":
+        joinGroup(session, content);
+        break;
+      case "message":
+        broadcastMessage(session, content);
+        break;
+      case "addGenre":
+        addRequestedGenre(session, content);
+        break;
+      case "getRequestedGenres":
+        sendMessage(session, getRequestedGenresForGroup(content).toString());
+        break;
+      case "getRequestedRestaurants":
+        sendMessage(session, restaurantService.getRestaurantsWithRequestedGenre(getRequestedGenresForGroup(content)).toString());
+        break;
+      default:
+        break;
     }
   }
 

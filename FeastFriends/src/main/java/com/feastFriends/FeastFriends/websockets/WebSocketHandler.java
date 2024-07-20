@@ -33,13 +33,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
   public void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
     String payload = message.getPayload();
     // Assume payload is a JSON string with action and groupName or message
-    // For example: {"action": "join", "content": "exampleGroup"}
+    // For example: {"action": "join", "content": "Maddux's Group"}
     //              {"action": "message", "content": "Hello, group!"}
     //              {"action": "addGenre", "content": "ITALIAN"}
     //              {"action": "addGenre", "content": "AMERICAN"}
     //              {"action": "addGenre", "content": "JAPANESE"}
-    //              {"action": "getRequestedGenres", "content": "exampleGroup"}
-    //              {"action": "getRequestedRestaurants", "content": "exampleGroup"}
+    //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
+    //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
 
     Map<String, String> data = parsePayload(payload);
     String action = data.get("action");
@@ -59,7 +59,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
         sendMessage(session, getRequestedGenresForGroup(content).toString());
         break;
       case "getRequestedRestaurants":
-        sendMessage(session, restaurantService.getRestaurantsWithRequestedGenre(getRequestedGenresForGroup(content)).toString());
+        List<String> genres = getRequestedGenresForGroup(content);
+        sendMessage(session, restaurantService.getRestaurantsWithRequestedGenre(genres).toString());
         break;
       default:
         break;
@@ -79,7 +80,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     return new HashMap<>();
   }
 
-  private void joinGroup(WebSocketSession session, String groupName) {
+  public void joinGroup(WebSocketSession session, String groupName) {
     if (sessionGroupMap.containsKey(session)) {
       String oldGroup = sessionGroupMap.get(session);
       if (!oldGroup.equals(groupName)) {
@@ -89,10 +90,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
         }
       }
     }
-
     sessionGroupMap.put(session, groupName);
     groupSessionsMap.computeIfAbsent(groupName, k -> new ArrayList<>()).add(session);
-    sendMessage(session, "Joined group: " + groupName);
+    System.out.println("Session " + session.getId() + " joined group " + groupName); // Log group join
   }
 
   private void broadcastMessage(WebSocketSession senderSession, String message) {
@@ -142,17 +142,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   public List<String> getRequestedGenresForGroup(String groupName) {
-    List<String> genresForGroup = new ArrayList<>();
+    List<String> genres = new ArrayList<>();
     List<WebSocketSession> sessions = groupSessionsMap.get(groupName);
-
     if (sessions != null) {
       for (WebSocketSession session : sessions) {
-        List<String> genres = requestedGenres.get(session);
-        if (genres != null) {
-          genresForGroup.addAll(genres);
-        }
+        genres.addAll(requestedGenres.getOrDefault(session, Collections.emptyList()));
       }
     }
-    return genresForGroup;
+    return genres;
   }
 }

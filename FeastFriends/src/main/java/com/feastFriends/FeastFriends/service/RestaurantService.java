@@ -47,6 +47,14 @@ public class RestaurantService {
     .collect(Collectors.toList());
   }
 
+  // this one is for groups to use
+  public List<String> getRestaurantsWithRequestedGenre(List<String> deezRequestedGenres) {
+    return restaurants.stream()
+    .filter(restaurant -> deezRequestedGenres.contains(restaurant.getGenre()))
+    .map(Restaurant::getName)
+    .collect(Collectors.toList());
+  }
+
   public void addRequestedGenre(String genre) {
     requestedGenres.add(genre);
   }

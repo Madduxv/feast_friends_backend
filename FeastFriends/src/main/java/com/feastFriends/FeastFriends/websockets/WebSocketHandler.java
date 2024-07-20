@@ -1,60 +1,154 @@
 package com.feastFriends.feastFriends.websockets;
 
-import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
-import java.io.IOException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.feastFriends.feastFriends.service.RestaurantService;
+
 import java.util.*;
+
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
-    // Map to store messages for each session
-    private final Map<WebSocketSession, List<String>> sessionMessages = new HashMap<>();
-    private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
+  private final Map<WebSocketSession, String> sessionGroupMap = new HashMap<>();
+  private final Map<String, List<WebSocketSession>> groupSessionsMap = new HashMap<>();
+  private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
 
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        super.afterConnectionEstablished(session);
-        // Initialize an empty message list for the new session
-        sessionMessages.put(session, new ArrayList<>());
-        requestedGenres.put(session, new ArrayList<>());
+  @Autowired
+  RestaurantService restaurantService = new RestaurantService();
+
+  @Override
+  public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    // Initialize session data if needed
+  }
+
+  @Override
+  public void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    String payload = message.getPayload();
+    // Assume payload is a JSON string with action and groupName or message
+    // For example: {"action": "join", "content": "Maddux's Group"}
+    //              {"action": "message", "content": "Hello, group!"}
+    //              {"action": "addGenre", "content": "ITALIAN"}
+    //              {"action": "addGenre", "content": "AMERICAN"}
+    //              {"action": "addGenre", "content": "JAPANESE"}
+    //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
+    //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
+
+    Map<String, String> data = parsePayload(payload);
+    String action = data.get("action");
+    String content = data.get("content");
+
+    switch (action) {
+      case "join":
+        joinGroup(session, content);
+        break;
+      case "message":
+        broadcastMessage(session, content);
+        break;
+      case "addGenre":
+        addRequestedGenre(session, content);
+        break;
+      case "getRequestedGenres":
+        sendMessage(session, getRequestedGenresForGroup(content).toString());
+        break;
+      case "getRequestedRestaurants":
+        List<String> genres = getRequestedGenresForGroup(content);
+        sendMessage(session, restaurantService.getRestaurantsWithRequestedGenre(genres).toString());
+        break;
+      default:
+        break;
     }
+  }
 
-    @Override
-    public void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
-        List<String> messages = sessionMessages.get(session);
-        if (messages != null) {
-            // Add the received message to the session's message list
-            messages.add(message.getPayload());
+  private Map<String, String> parsePayload(String payload) {
+    ObjectMapper objectMapper = new ObjectMapper();
+    try {
+      Map<String, String> map = objectMapper.readValue(payload, new TypeReference<Map<String,String>>(){});
+      return map;
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    // Implement JSON parsing logic here
+    // Return a map of key-value pairs from the JSON payload
+    return new HashMap<>();
+  }
 
-            // Optionally, you can broadcast the message to other sessions or process it
-            broadcastToGroup(session, message);
+  public void joinGroup(WebSocketSession session, String groupName) {
+    if (sessionGroupMap.containsKey(session)) {
+      String oldGroup = sessionGroupMap.get(session);
+      if (!oldGroup.equals(groupName)) {
+        groupSessionsMap.get(oldGroup).remove(session);
+        if (groupSessionsMap.get(oldGroup).isEmpty()) {
+          groupSessionsMap.remove(oldGroup);
         }
+      }
+    }
+    sessionGroupMap.put(session, groupName);
+    groupSessionsMap.computeIfAbsent(groupName, k -> new ArrayList<>()).add(session);
+    System.out.println("Session " + session.getId() + " joined group " + groupName); // Log group join
+  }
+
+  private void broadcastMessage(WebSocketSession senderSession, String message) {
+    String groupName = sessionGroupMap.get(senderSession);
+    List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
+
+    if (groupSessions != null) {
+      for (WebSocketSession session : groupSessions) {
+        if (session.isOpen() && session != senderSession) {
+          sendMessage(session, message);
+        }
+      }
+    }
+  }
+
+  private void addRequestedGenre(WebSocketSession session, String genre) {
+    requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
+  }
+
+  private void sendMessage(WebSocketSession session, String message) {
+    try {
+      session.sendMessage(new TextMessage(message));
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  @Override
+  public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    super.afterConnectionClosed(session, status);
+
+    String groupName = sessionGroupMap.get(session);
+    if (groupName != null) {
+      groupSessionsMap.get(groupName).remove(session);
+      if (groupSessionsMap.get(groupName).isEmpty()) {
+        groupSessionsMap.remove(groupName);
+      }
     }
 
-    private void broadcastToGroup(WebSocketSession senderSession, TextMessage message) {
-        // Example method to broadcast to a group, if needed
-        // Implement logic to broadcast message to a group of sessions
-    }
+    sessionGroupMap.remove(session);
+    requestedGenres.remove(session);
+  }
 
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        super.afterConnectionClosed(session, status);
-        // Clean up the message list when the session is closed
-        sessionMessages.remove(session);
-    }
+  //get requested genres for a specific session
+  public List<String> getRequestedGenres(WebSocketSession session) {
+    return requestedGenres.getOrDefault(session, Collections.emptyList());
+  }
 
-    // Method to get stored messages for a session
-    public List<String> getMessagesForSession(WebSocketSession session) {
-        return sessionMessages.getOrDefault(session, new ArrayList<>());
+  public List<String> getRequestedGenresForGroup(String groupName) {
+    List<String> genres = new ArrayList<>();
+    List<WebSocketSession> sessions = groupSessionsMap.get(groupName);
+    if (sessions != null) {
+      for (WebSocketSession session : sessions) {
+        genres.addAll(requestedGenres.getOrDefault(session, Collections.emptyList()));
+      }
     }
-
-    public List<String> getRequestedGenres(WebSocketSession session) {
-        return sessionMessages.getOrDefault(session, new ArrayList<>());
-    }
-
+    return genres;
+  }
 }

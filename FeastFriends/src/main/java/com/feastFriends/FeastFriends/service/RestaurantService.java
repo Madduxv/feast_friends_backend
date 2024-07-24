@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Iterator;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,6 +54,27 @@ public class RestaurantService {
     .filter(restaurant -> deezRequestedGenres.contains(restaurant.getGenre()))
     .map(Restaurant::getName)
     .collect(Collectors.toList());
+  }
+
+
+  public List<String> getMatches(List<String> requests, int groupMembers) {
+    List<String> fillerList = new ArrayList<>();
+
+    for(int i = 0; i<groupMembers-1; i++) {
+      fillerList.clear();
+      Iterator<String> iterator = requests.iterator();
+
+      while (iterator.hasNext()) {
+        String element = iterator.next();
+
+        if (!fillerList.contains(element)){
+          fillerList.add(element);
+          iterator.remove();
+        }
+      } 
+    }
+
+    return requests;
   }
 
   public void addRequestedGenre(String genre) {

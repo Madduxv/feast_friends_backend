@@ -21,6 +21,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private final Map<WebSocketSession, String> sessionGroupMap = new HashMap<>();
   private final Map<String, List<WebSocketSession>> groupSessionsMap = new HashMap<>();
   private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
+  private final Map<WebSocketSession, List<String>> requestedRestaurants = new HashMap<>();
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
@@ -41,6 +42,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     //              {"action": "addGenre", "content": "JAPANESE"}
     //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
     //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
+    //              {"action": "getMatches", "content": "Maddux's Group"}
 
     Map<String, String> data = parsePayload(payload);
     String action = data.get("action");
@@ -48,19 +50,31 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     switch (action) {
       case "join":
-        joinGroup(session, content);
+        joinGroup(session, content); // content = groupName
         break;
       // case "message":
       //   broadcastMessage(session, "message", content);
       //   break;
       case "addGenre":
-        addRequestedGenre(session, content);
+        addRequestedGenre(session, content); // content = genre
+        break;
+      case "addRestaurant":
+        addRequestedRestaurant(session, content); // content = restaurant name
         break;
       case "getRequestedGenres":
-        sendMessage(session, "genres", getRequestedGenresForGroup(content));
+        sendMessage(session, "genres", getRequestedGenresForGroup(content)); // content = groupName
+        break;
+      case "getGenreMatches":
+        List<String> genreRequests = getRequestedGenresForGroup(content); // content = groupName
+        sendMessage(session, "genres", getMatches(content, genreRequests));
+        break;
+      case "getRestaurantMatches":
+        List<String> genreMatches = getMatches(content, getRequestedGenresForGroup(content)); // content = groupName
+        List<String> restaurants = restaurantService.getRestaurantsWithRequestedGenre(genreMatches);
+        sendMessage(session, "genres", getMatches(content, restaurants));
         break;
       case "getRequestedRestaurants":
-        List<String> genres = getRequestedGenresForGroup(content);
+        List<String> genres = getRequestedGenresForGroup(content); // content = groupName
         sendMessage(session, "restaurants", restaurantService.getRestaurantsWithRequestedGenre(genres));
         break;
       default:
@@ -113,6 +127,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
     requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
   }
 
+  private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
+    requestedRestaurants.computeIfAbsent(session, k -> new ArrayList<>()).add(restaurant);
+  }
+
   private void sendMessage(WebSocketSession session, String contentType, List<String> message) {
     try {
       ResponseMessage responseMessage = new ResponseMessage(contentType, message);
@@ -138,11 +156,16 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     sessionGroupMap.remove(session);
     requestedGenres.remove(session);
+    requestedRestaurants.remove(session);
   }
 
   //get requested genres for a specific session
   public List<String> getRequestedGenres(WebSocketSession session) {
     return requestedGenres.getOrDefault(session, Collections.emptyList());
+  }
+
+  public List<String> getRequestedRestaurants(WebSocketSession session) {
+    return requestedRestaurants.getOrDefault(session, Collections.emptyList());
   }
 
   public List<String> getRequestedGenresForGroup(String groupName) {
@@ -154,5 +177,21 @@ public class WebSocketHandler extends TextWebSocketHandler {
       }
     }
     return genres;
+  }
+
+  public List<String> getRequestedRestaurantsForGroup(String groupName) {
+    List<String> restaurants = new ArrayList<>();
+    List<WebSocketSession> sessions = groupSessionsMap.get(groupName);
+    if (sessions != null) {
+      for (WebSocketSession session : sessions) {
+        restaurants.addAll(requestedRestaurants.getOrDefault(session, Collections.emptyList()));
+      }
+    }
+    return restaurants;
+  }
+
+  public List<String> getMatches(String groupName, List<String> requests) {
+    int groupLength = groupSessionsMap.get(groupName).size();
+    return restaurantService.getMatches(requests, groupLength);
   }
 }

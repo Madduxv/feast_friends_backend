@@ -22,6 +22,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private final Map<String, List<WebSocketSession>> groupSessionsMap = new HashMap<>();
   private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
   private final Map<WebSocketSession, List<String>> requestedRestaurants = new HashMap<>();
+  private final Map<String, Integer> groupDoneMap = new HashMap<>();
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
@@ -41,41 +42,45 @@ public class WebSocketHandler extends TextWebSocketHandler {
     //              {"action": "addGenre", "content": "AMERICAN"}
     //              {"action": "addGenre", "content": "JAPANESE"}
     //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
+    //              {"action": "getGenreMatches", "content": "Maddux's Group"}
+    //              {"action": "getRestaurantChoices", "content": "Maddux's Group"}
+    //              {"action": "addRestaurant", "content": "Burger King"}
+    //              {"action": "addRestaurant", "content": "Ichiban"}
     //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
-    //              {"action": "getMatches", "content": "Maddux's Group"}
+    //              {"action": "getRestaurantMatches", "content": "Maddux's Group"}
 
     Map<String, String> data = parsePayload(payload);
     String action = data.get("action");
     String content = data.get("content");
 
     switch (action) {
-      case "join":
+      case "join": // find user page
         joinGroup(session, content); // content = groupName
         break;
-      // case "message":
-      //   broadcastMessage(session, "message", content);
-      //   break;
-      case "addGenre":
+      case "addGenre": // genre page
         addRequestedGenre(session, content); // content = genre
         break;
-      case "addRestaurant":
-        addRequestedRestaurant(session, content); // content = restaurant name
-        break;
-      case "getRequestedGenres":
+      case "getRequestedGenres": // genre page debug
         sendMessage(session, "genres", getRequestedGenresForGroup(content)); // content = groupName
         break;
-      case "getGenreMatches":
+      case "getGenreMatches": // user complete waiting page
         List<String> genreRequests = getRequestedGenresForGroup(content); // content = groupName
-        sendMessage(session, "genres", getMatches(content, genreRequests));
+        sendMessage(session, "genreMatches", getMatches(content, genreRequests));
         break;
-      case "getRestaurantMatches":
-        List<String> genreMatches = getMatches(content, getRequestedGenresForGroup(content)); // content = groupName
-        List<String> restaurants = restaurantService.getRestaurantsWithRequestedGenre(genreMatches);
-        sendMessage(session, "genres", getMatches(content, restaurants));
-        break;
-      case "getRequestedRestaurants":
+      case "getRestaurantChoices": // user complete waiting page
         List<String> genres = getRequestedGenresForGroup(content); // content = groupName
-        sendMessage(session, "restaurants", restaurantService.getRestaurantsWithRequestedGenre(genres));
+        List<String> genreMatches = getMatches(content, genres);
+        sendMessage(session, "restaurants", restaurantService.getRestaurantsWithRequestedGenre(genreMatches));
+        break;
+      case "addRestaurant": // restaurant page
+        addRequestedRestaurant(session, content); // content = restaurant name
+        break;
+      case "getRequestedRestaurants": // restaurant page debug
+        sendMessage(session, "groupRestaurants", getRequestedRestaurantsForGroup(content)); // content = groupName
+        break;
+      case "getRestaurantMatches": // results  page
+        List<String> restaurants = getRequestedRestaurantsForGroup(content); // content = groupName
+        sendMessage(session, "restaurantMatches", getMatches(content, restaurants));
         break;
       default:
         break;

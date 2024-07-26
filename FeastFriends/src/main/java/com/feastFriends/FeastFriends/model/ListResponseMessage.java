@@ -3,7 +3,7 @@ package com.feastFriends.feastFriends.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
-public class ResponseMessage {
+public class ListResponseMessage {
 
   @JsonProperty("contentType")
   private String contentType;
@@ -11,9 +11,9 @@ public class ResponseMessage {
   @JsonProperty("content")
   private List<String> content;
 
-  public ResponseMessage() {}
+  public ListResponseMessage() {}
 
-  public ResponseMessage(String contentType, List<String> content) {
+  public ListResponseMessage(String contentType, List<String> content) {
     this.contentType = contentType;
     this.content = content;
   }

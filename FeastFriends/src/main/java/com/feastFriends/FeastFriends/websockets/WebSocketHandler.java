@@ -9,20 +9,26 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.feastFriends.feastFriends.model.ResponseMessage;
+import com.feastFriends.feastFriends.model.ListResponseMessage;
+import com.feastFriends.feastFriends.model.StringResponseMessage;
 import com.feastFriends.feastFriends.service.RestaurantService;
 
-import java.util.*;
+import java.util.Map;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
-  private final Map<WebSocketSession, String> sessionGroupMap = new HashMap<>();
-  private final Map<String, List<WebSocketSession>> groupSessionsMap = new HashMap<>();
-  private final Map<WebSocketSession, List<String>> requestedGenres = new HashMap<>();
-  private final Map<WebSocketSession, List<String>> requestedRestaurants = new HashMap<>();
-  private final Map<String, Integer> groupDoneMap = new HashMap<>();
+  private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
+  private final Map<String, List<WebSocketSession>> groupSessionsMap = new ConcurrentHashMap<>();
+  private final Map<WebSocketSession, List<String>> requestedGenres = new ConcurrentHashMap<>();
+  private final Map<WebSocketSession, List<String>> requestedRestaurants = new ConcurrentHashMap<>();
+  private final Map<String, Integer> groupDoneMap = new ConcurrentHashMap<>();
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
@@ -37,16 +43,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
     String payload = message.getPayload();
     // Assume payload is a JSON string with action and groupName or message
     // For example: {"action": "join", "content": "Maddux's Group"}
-    //              {"action": "message", "content": "Hello, group!"}
     //              {"action": "addGenre", "content": "ITALIAN"}
     //              {"action": "addGenre", "content": "AMERICAN"}
     //              {"action": "addGenre", "content": "JAPANESE"}
     //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
+    //              {"action": "done", "content": "Maddux's Group"}
     //              {"action": "getGenreMatches", "content": "Maddux's Group"}
     //              {"action": "getRestaurantChoices", "content": "Maddux's Group"}
     //              {"action": "addRestaurant", "content": "Burger King"}
     //              {"action": "addRestaurant", "content": "Ichiban"}
     //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
+    //              {"action": "done", "content": "Maddux's Group"}
     //              {"action": "getRestaurantMatches", "content": "Maddux's Group"}
 
     Map<String, String> data = parsePayload(payload);
@@ -57,30 +64,36 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "join": // find user page
         joinGroup(session, content); // content = groupName
         break;
+      case "done": //genres and restaurants page
+        if (addDoneMember(content)) {
+          groupDoneMap.put(content, 0);
+          broadcastMessage(session, "groupDoneStatus", "Everyone is done");
+        }
+        break;
       case "addGenre": // genre page
         addRequestedGenre(session, content); // content = genre
         break;
       case "getRequestedGenres": // genre page debug
-        sendMessage(session, "genres", getRequestedGenresForGroup(content)); // content = groupName
+        sendListMessage(session, "genres", getRequestedGenresForGroup(content)); // content = groupName
         break;
       case "getGenreMatches": // user complete waiting page
         List<String> genreRequests = getRequestedGenresForGroup(content); // content = groupName
-        sendMessage(session, "genreMatches", getMatches(content, genreRequests));
+        sendListMessage(session, "genreMatches", getMatches(content, genreRequests));
         break;
       case "getRestaurantChoices": // user complete waiting page
         List<String> genres = getRequestedGenresForGroup(content); // content = groupName
         List<String> genreMatches = getMatches(content, genres);
-        sendMessage(session, "restaurants", restaurantService.getRestaurantsWithRequestedGenre(genreMatches));
+        sendListMessage(session, "restaurants", restaurantService.getRestaurantsWithRequestedGenre(genreMatches));
         break;
       case "addRestaurant": // restaurant page
         addRequestedRestaurant(session, content); // content = restaurant name
         break;
       case "getRequestedRestaurants": // restaurant page debug
-        sendMessage(session, "groupRestaurants", getRequestedRestaurantsForGroup(content)); // content = groupName
+        sendListMessage(session, "groupRestaurants", getRequestedRestaurantsForGroup(content)); // content = groupName
         break;
       case "getRestaurantMatches": // results  page
         List<String> restaurants = getRequestedRestaurantsForGroup(content); // content = groupName
-        sendMessage(session, "restaurantMatches", getMatches(content, restaurants));
+        sendListMessage(session, "restaurantMatches", getMatches(content, restaurants));
         break;
       default:
         break;
@@ -112,21 +125,22 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
     sessionGroupMap.put(session, groupName);
     groupSessionsMap.computeIfAbsent(groupName, k -> new ArrayList<>()).add(session);
+    groupDoneMap.putIfAbsent(groupName, 0);
     System.out.println("Session " + session.getId() + " joined group " + groupName); // Log group join
   }
 
-  // private void broadcastMessage(WebSocketSession senderSession, String contentType, List<String> message) {
-  //   String groupName = sessionGroupMap.get(senderSession);
-  //   List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
-  //
-  //   if (groupSessions != null) {
-  //     for (WebSocketSession session : groupSessions) {
-  //       if (session.isOpen() && session != senderSession) {
-  //         sendMessage(session, contentType, message);
-  //       }
-  //     }
-  //   }
-  // }
+  private void broadcastMessage(WebSocketSession senderSession, String contentType, String message) {
+    String groupName = sessionGroupMap.get(senderSession);
+    List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
+
+    if (groupSessions != null) {
+      for (WebSocketSession session : groupSessions) {
+        if (session.isOpen()) {
+          sendStringMessage(session, contentType, message);
+        }
+      }
+    }
+  }
 
   private void addRequestedGenre(WebSocketSession session, String genre) {
     requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
@@ -136,11 +150,34 @@ public class WebSocketHandler extends TextWebSocketHandler {
     requestedRestaurants.computeIfAbsent(session, k -> new ArrayList<>()).add(restaurant);
   }
 
-  private void sendMessage(WebSocketSession session, String contentType, List<String> message) {
+  private boolean addDoneMember(String groupName) {
+    groupDoneMap.compute(groupName, (key, value) -> (value == null) ? 0 : value + 1);
+    if (getGroupSize(groupName) == groupDoneMap.get(groupName)) {
+      return true;
+    }
+    return false;
+  }
+
+  private Integer getGroupSize(String groupName) {
+    return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;
+  }
+
+  private void sendListMessage(WebSocketSession session, String contentType, List<String> message) {
     try {
-      ResponseMessage responseMessage = new ResponseMessage(contentType, message);
+      ListResponseMessage listResponseMessage = new ListResponseMessage(contentType, message);
       ObjectMapper objectMapper = new ObjectMapper();
-      String jsonString = objectMapper.writeValueAsString(responseMessage);
+      String jsonString = objectMapper.writeValueAsString(listResponseMessage);
+      session.sendMessage(new TextMessage(jsonString));
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  private void sendStringMessage(WebSocketSession session, String contentType, String message) {
+    try {
+      StringResponseMessage stringResponseMessage = new StringResponseMessage(contentType, message);
+      ObjectMapper objectMapper = new ObjectMapper();
+      String jsonString = objectMapper.writeValueAsString(stringResponseMessage);
       session.sendMessage(new TextMessage(jsonString));
     } catch (Exception e) {
       e.printStackTrace();
@@ -156,6 +193,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       groupSessionsMap.get(groupName).remove(session);
       if (groupSessionsMap.get(groupName).isEmpty()) {
         groupSessionsMap.remove(groupName);
+        groupDoneMap.remove(groupName);
       }
     }
 

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.io.File;
 // import java.io.IOException;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,6 +92,13 @@ public class UserService {
   public List<User> getAllUsers() {
     users = deserialize();
     return users;
+  }
+
+  public List<String> getAllUsersNames() {
+    users = deserialize();
+    return users.stream()
+    .map(User::getName)
+    .collect(Collectors.toList());
   }
   
   // remove friend

@@ -28,13 +28,18 @@ public class UserController {
   }
 
   @GetMapping("/get_friends")
-  public ResponseEntity<List<Friend>> getFriends(@RequestBody String name) {
+  public ResponseEntity<List<Friend>> getFriends(@RequestParam String name) {
     return ResponseEntity.ok(userService.getFriends(name));
   }
 
   @GetMapping("/all_users")
   public ResponseEntity<List<User>> getAllUsers() {
     return ResponseEntity.ok(userService.getAllUsers());
+  }
+
+  @GetMapping("/all_users_names")
+  public ResponseEntity<List<String>> getAllUsersNames() {
+    return ResponseEntity.ok(userService.getAllUsersNames());
   }
 
   @PostMapping("/add_user")

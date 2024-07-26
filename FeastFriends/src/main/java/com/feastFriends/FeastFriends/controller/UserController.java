@@ -18,10 +18,6 @@ public class UserController {
   @Autowired
   private UserService userService;
 
-  // public UserController(UserService userService) {
-  //   this.userService = userService;
-  // }
-
   @GetMapping("/find_user")
   public ResponseEntity<User> findUser(@RequestBody String name) {
     return ResponseEntity.ok(userService.findUserByName(name));

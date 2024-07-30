@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
+  private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
   private final Map<String, List<WebSocketSession>> groupSessionsMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, List<String>> requestedGenres = new ConcurrentHashMap<>();
@@ -63,6 +64,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
     switch (action) {
       case "join": // find user page
         joinGroup(session, content); // content = groupName
+        break;
+      case "name": // find user page
+        addSessionName(session, content); // content = name
         break;
       case "done": //genres and restaurants page
         if (addDoneMember(content)) {
@@ -144,6 +148,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   private void addRequestedGenre(WebSocketSession session, String genre) {
     requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
+  }
+
+  private void addSessionName(WebSocketSession session, String name) {
+    sessionNameMap.computeIfAbsent(session, k -> name);
   }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {

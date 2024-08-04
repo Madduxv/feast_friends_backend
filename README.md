@@ -66,7 +66,7 @@
 `the list of genres will be a list of the restaurants that your group matched on`
 
 ### Example workflow
-1. """{"action": "name", "content": "Maddux"}"""
+1. {"action": "name", "content": "Maddux"}
 2. {"action": "join", "content": "Maddux's Group"}
 3. {"action": "addGenre", "content": "ITALIAN"}
 4. {"action": "addGenre", "content": "AMERICAN"}
@@ -83,5 +83,61 @@
 
 ## Restaurant REST Endpoints 
 
+### http://localhost:8080/api/restaurant/all_restaurants
+- 
+``` To use this endpoint, you can use curl:
+curl http://localhost:8080/api/restaurant/all_restaurants
+```
+- This endpoint returns a JSON response with all restaurants
+
+### These endpoints are deprecated
+- http://localhost:8080/api/restaurant/request_genre
+- http://localhost:8080/api/restaurant/clear_genres
+- http://localhost:8080/api/restaurant/requested_genres
+- http://localhost:8080/api/restaurant/requested_restaurants
+
+
 ## User REST Endpoints 
+
+### http://localhost:8080/api/user/find_user
+- This endpoint takes a String RequestBody of the user you want to find
+``` For example:
+curl -X GET localhost:8080/api/user/find_user -d "Maddux"
+```
+- The server will return a JSON response with the user's name and friends.
+``` Example response:
+{"name":"Maddux","friends":[{"name":"Trin"},{"name":"Cassie"},{"name":"Alaura"}]}
+```
+
+### http://localhost:8080/api/user/get_friends
+- This endpoint takes a String RequestBody of the user whose friends you want to find.
+``` For example:
+curl -G localhost:8080/api/user/get_friends --data-urlencode "name=Maddux"
+```
+- The server will return a JSON response with the user's name and friends.
+``` Example response:
+[{"name":"Trin"},{"name":"Cassie"},{"name":"Alaura"}]
+```
+
+### http://localhost:8080/api/user/all_users
+- This endpoint takes no parameters
+```To interact with curl:
+curl -X GET localhost:8080/api/user/all_users
+```
+- The server will respond with a JSON list of all users
+
+### http://localhost:8080/api/user/all_users_names
+- This endpoint takes no parameters
+```To interact with curl:
+curl -X GET localhost:8080/api/user/all_users_names
+```
+- The server will respond with a JSON list of all users names
+
+### http://localhost:8080/api/user/add_user
+```To interact with curl:
+curl -X POST localhost:8080/api/user/add_user -d "Kai"
+```
+- The server will respond with "Added User"
+
+### http://localhost:8080/api/user/add_friend
 

@@ -140,4 +140,7 @@ curl -X POST localhost:8080/api/user/add_user -d "Kai"
 - The server will respond with "Added User"
 
 ### http://localhost:8080/api/user/add_friend
-
+- This endpoint takes 2 parameters: "url?user=yourName&friend=friendName"
+``` For example:
+curl -X POST "http://localhost:8080/api/user/add_friend" -d "user=Kai" -d "friend=Maddux"
+```

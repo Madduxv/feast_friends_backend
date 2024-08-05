@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebSocketHandler extends TextWebSocketHandler {
 
   private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
+  private final Map<String, WebSocketSession> nameSessionMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
   private final Map<String, List<WebSocketSession>> groupSessionsMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, List<String>> requestedGenres = new ConcurrentHashMap<>();
@@ -71,7 +72,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "done": //genres and restaurants page
         if (addDoneMember(content)) {
           groupDoneMap.put(content, 0);
-          broadcastMessage(session, "groupDoneStatus", "Everyone is done");
+          broadcastMessageToGroup(session, "groupDoneStatus", "Everyone is done");
         }
         break;
       case "addGenre": // genre page
@@ -133,7 +134,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     System.out.println("Session " + session.getId() + " joined group " + groupName); // Log group join
   }
 
-  private void broadcastMessage(WebSocketSession senderSession, String contentType, String message) {
+  private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
     String groupName = sessionGroupMap.get(senderSession);
     List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
 

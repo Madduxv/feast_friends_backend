@@ -182,6 +182,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     String name = sessionNameMap.getOrDefault(session, null);
     if(name==null) {
       sendStringMessage(session, "noName", "You have not provided a name");
+      return;
     }
     List<Friend> usersFriends = userService.getFriends(name);
     List<String> usersFriendsNames = new ArrayList<>();
@@ -193,9 +194,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
         userActiveFriends.add(friendName);
       }
     }
-    System.out.println(usersFriendsNames);
-    System.out.println(userActiveFriends);
-
     sendListMessage(session, "activeFriends", userActiveFriends);
     return;
   }

@@ -11,7 +11,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.feastFriends.feastFriends.model.ListResponseMessage;
 import com.feastFriends.feastFriends.model.StringResponseMessage;
+import com.feastFriends.feastFriends.model.Friend;
 import com.feastFriends.feastFriends.service.RestaurantService;
+import com.feastFriends.feastFriends.service.UserService;
 
 import java.util.Map;
 import java.util.Collections;
@@ -34,6 +36,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
+
+  @Autowired
+  private UserService userService; 
 
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -68,6 +73,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
       case "name": // find user page
         addSessionName(session, content); // content = name
+        break;
+      case "friends": // find user page
+        getUserActiveFriends(session);
         break;
       case "done": //genres and restaurants page
         if (addDoneMember(content)) {
@@ -153,6 +161,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   private void addSessionName(WebSocketSession session, String name) {
     sessionNameMap.computeIfAbsent(session, k -> name);
+    nameSessionMap.computeIfAbsent(name, k -> session);
   }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
@@ -165,6 +174,26 @@ public class WebSocketHandler extends TextWebSocketHandler {
       return true;
     }
     return false;
+  }
+
+  private List<String> getUserActiveFriends(WebSocketSession session) {
+    List<String> userActiveFriends = new ArrayList<>();
+    String name = sessionNameMap.getOrDefault(session, null);
+    if(name==null) {
+      return null;
+    }
+    List<Friend> usersFriends = userService.getFriends(name);
+    List<String> usersFriendsNames = new ArrayList<>();
+    for (Friend friend : usersFriends) {
+      usersFriendsNames.add(friend.getName());
+    }
+    for (String friendName: usersFriendsNames) {
+      if (nameSessionMap.containsKey(friendName)) {
+        userActiveFriends.add(friendName);
+      }
+    }
+    System.out.println(usersFriendsNames);
+    return usersFriends != null ? userActiveFriends : new ArrayList<String>();
   }
 
   private Integer getGroupSize(String groupName) {
@@ -211,7 +240,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
     requestedRestaurants.remove(session);
   }
 
-  //get requested genres for a specific session
   public List<String> getRequestedGenres(WebSocketSession session) {
     return requestedGenres.getOrDefault(session, Collections.emptyList());
   }

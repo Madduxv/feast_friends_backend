@@ -1,4 +1,6 @@
+<div align="center">
 # Feast Friends Backend API Endpoints
+</div>
 
 ## ws://localhost:8080/ws
 
@@ -85,7 +87,8 @@
 
 ### http://localhost:8080/api/restaurant/all_restaurants
 - 
-``` To use this endpoint, you can use curl:
+``` 
+# To use this endpoint, you can use curl:
 curl http://localhost:8080/api/restaurant/all_restaurants
 ```
 - This endpoint returns a JSON response with all restaurants
@@ -101,46 +104,54 @@ curl http://localhost:8080/api/restaurant/all_restaurants
 
 ### http://localhost:8080/api/user/find_user
 - This endpoint takes a String RequestBody of the user you want to find
-``` For example:
+``` 
+# For example:
 curl -X GET localhost:8080/api/user/find_user -d "Maddux"
 ```
 - The server will return a JSON response with the user's name and friends.
-``` Example response:
+``` 
+# Example response:
 {"name":"Maddux","friends":[{"name":"Trin"},{"name":"Cassie"},{"name":"Alaura"}]}
 ```
 
 ### http://localhost:8080/api/user/get_friends
 - This endpoint takes a String RequestBody of the user whose friends you want to find.
-``` For example:
+``` 
+# For example:
 curl -G localhost:8080/api/user/get_friends --data-urlencode "name=Maddux"
 ```
 - The server will return a JSON response with the user's name and friends.
-``` Example response:
+``` 
+# Example response:
 [{"name":"Trin"},{"name":"Cassie"},{"name":"Alaura"}]
 ```
 
 ### http://localhost:8080/api/user/all_users
 - This endpoint takes no parameters
-```To interact with curl:
+``` 
+# To interact with curl:
 curl -X GET localhost:8080/api/user/all_users
 ```
 - The server will respond with a JSON list of all users
 
 ### http://localhost:8080/api/user/all_users_names
 - This endpoint takes no parameters
-```To interact with curl:
+```
+# To interact with curl:
 curl -X GET localhost:8080/api/user/all_users_names
 ```
 - The server will respond with a JSON list of all users names
 
 ### http://localhost:8080/api/user/add_user
-```To interact with curl:
+```
+# To interact with curl:
 curl -X POST localhost:8080/api/user/add_user -d "Kai"
 ```
 - The server will respond with "Added User"
 
 ### http://localhost:8080/api/user/add_friend
 - This endpoint takes 2 parameters: "url?user=yourName&friend=friendName"
-``` For example:
+``` 
+# For example:
 curl -X POST "http://localhost:8080/api/user/add_friend" -d "user=Kai" -d "friend=Maddux"
 ```

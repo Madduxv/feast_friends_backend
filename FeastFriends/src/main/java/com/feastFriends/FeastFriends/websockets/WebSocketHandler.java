@@ -162,6 +162,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private void addSessionName(WebSocketSession session, String name) {
     sessionNameMap.computeIfAbsent(session, k -> name);
     nameSessionMap.computeIfAbsent(name, k -> session);
+    sendStringMessage(session, "name", "nameSet");
   }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
@@ -176,11 +177,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
     return false;
   }
 
-  private List<String> getUserActiveFriends(WebSocketSession session) {
+  private void getUserActiveFriends(WebSocketSession session) {
     List<String> userActiveFriends = new ArrayList<>();
     String name = sessionNameMap.getOrDefault(session, null);
     if(name==null) {
-      return null;
+      sendStringMessage(session, "noName", "You have not provided a name");
     }
     List<Friend> usersFriends = userService.getFriends(name);
     List<String> usersFriendsNames = new ArrayList<>();
@@ -193,8 +194,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
       }
     }
     System.out.println(usersFriendsNames);
-    return usersFriends != null ? userActiveFriends : new ArrayList<String>();
+    System.out.println(userActiveFriends);
+
+    sendListMessage(session, "activeFriends", userActiveFriends);
+    return;
   }
+    
+    // return usersFriends != null ? userActiveFriends : new ArrayList<String>();
 
   private Integer getGroupSize(String groupName) {
     return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;

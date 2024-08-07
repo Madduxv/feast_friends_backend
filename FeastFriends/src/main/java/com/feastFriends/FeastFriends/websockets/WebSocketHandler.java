@@ -33,6 +33,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private final Map<WebSocketSession, List<String>> requestedGenres = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, List<String>> requestedRestaurants = new ConcurrentHashMap<>();
   private final Map<String, Integer> groupDoneMap = new ConcurrentHashMap<>();
+  // private final Map<String, Integer> groupActiveMap = new ConcurrentHashMap<>();
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
@@ -74,8 +75,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "name": // find user page
         addSessionName(session, content); // content = name
         break;
-      case "friends": // find user page
-        getUserActiveFriends(session);
+      case "friendsGroups": // find user page
+        getUserActiveFriendsGroups(session);
         break;
       case "done": //genres and restaurants page
         if (addDoneMember(content)) {
@@ -89,6 +90,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "getRequestedGenres": // genre page debug
         sendListMessage(session, "genres", getRequestedGenresForGroup(content)); // content = groupName
         break;
+
       case "getGenreMatches": // user complete waiting page
         List<String> genreRequests = getRequestedGenresForGroup(content); // content = groupName
         sendListMessage(session, "genreMatches", getMatches(content, genreRequests));
@@ -140,6 +142,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     groupSessionsMap.computeIfAbsent(groupName, k -> new ArrayList<>()).add(session);
     groupDoneMap.putIfAbsent(groupName, 0);
     System.out.println("Session " + session.getId() + " joined group " + groupName); // Log group join
+    // broadcastGroupToFriends(session, groupName); // This is a maybe
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
@@ -177,8 +180,34 @@ public class WebSocketHandler extends TextWebSocketHandler {
     return false;
   }
 
-  private void getUserActiveFriends(WebSocketSession session) {
-    List<String> userActiveFriends = new ArrayList<>();
+  // This is for later
+
+  // private List<String> getUserActiveFriends(WebSocketSession session) {
+  //
+  //   List<String> userActiveFriends = new ArrayList<>();
+  //   String name = sessionNameMap.getOrDefault(session, null);
+  //   if(name==null) {
+  //     sendStringMessage(session, "noName", "You have not provided a name");
+  //     return new ArrayList<String>();
+  //   }
+  //   List<Friend> usersFriends = userService.getFriends(name);
+  //   List<String> usersFriendsNames = new ArrayList<>();
+  //   for (Friend friend : usersFriends) {
+  //     usersFriendsNames.add(friend.getName());
+  //   }
+  //   for (String friendName: usersFriendsNames) {
+  //     if (nameSessionMap.containsKey(friendName)) {
+  //       userActiveFriends.add(friendName);
+  //     }
+  //   }
+  //   return userActiveFriends;
+  // }
+
+  // Yes I know I can use the above function in the bottom one. No I will not right now.
+
+  private void getUserActiveFriendsGroups(WebSocketSession session) {
+    List<String> userActiveFriendsGroups = new ArrayList<>();
+    String friendsGroup;
     String name = sessionNameMap.getOrDefault(session, null);
     if(name==null) {
       sendStringMessage(session, "noName", "You have not provided a name");
@@ -191,15 +220,28 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
     for (String friendName: usersFriendsNames) {
       if (nameSessionMap.containsKey(friendName)) {
-        userActiveFriends.add(friendName);
+        friendsGroup = sessionGroupMap.getOrDefault(nameSessionMap.get(friendName), "");
+        userActiveFriendsGroups.add(friendsGroup);
       }
     }
-    sendListMessage(session, "activeFriends", userActiveFriends);
-    return;
+    sendListMessage(session, "activeFriendsGroups", userActiveFriendsGroups);
   }
-    
-    // return usersFriends != null ? userActiveFriends : new ArrayList<String>();
+  
+  // This is a maybe
 
+  // private void broadcastGroupToFriends(WebSocketSession session, String groupName) { 
+  //   String name = sessionNameMap.getOrDefault(session, null);
+  //   List<String> userAndGroup = new ArrayList<>();
+  //   if(name==null) {
+  //     sendStringMessage(session, "noName", "You have not provided a name");
+  //     return;
+  //   }
+  //   List<String> userActiveFriends = getUserActiveFriends(session);
+  //   for (String friend : userActiveFriends) {
+  //     sendListMessage(nameSessionMap.get(friend), "newActiveFriend" , userAndGroup);
+  //   }
+  // }
+    
   private Integer getGroupSize(String groupName) {
     return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;
   }

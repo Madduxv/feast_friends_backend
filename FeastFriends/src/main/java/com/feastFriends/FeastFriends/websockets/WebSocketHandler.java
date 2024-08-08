@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
+// Yes I know redis would wouk better. I will implement it later.
   private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
   private final Map<String, WebSocketSession> nameSessionMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
@@ -203,8 +204,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
   //   return userActiveFriends;
   // }
 
-  // Yes I know I can use the above function in the bottom one. No I will not right now.
-
   private void getUserActiveFriendsGroups(WebSocketSession session) {
     List<String> userActiveFriendsGroups = new ArrayList<>();
     String friendsGroup;
@@ -221,7 +220,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
     for (String friendName: usersFriendsNames) {
       if (nameSessionMap.containsKey(friendName)) {
         friendsGroup = sessionGroupMap.getOrDefault(nameSessionMap.get(friendName), "");
-        userActiveFriendsGroups.add(friendsGroup);
+        if (!userActiveFriendsGroups.contains(friendsGroup)) {
+          userActiveFriendsGroups.add(friendsGroup);
+        }
       }
     }
     sendListMessage(session, "activeFriendsGroups", userActiveFriendsGroups);
@@ -245,6 +246,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private Integer getGroupSize(String groupName) {
     return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;
   }
+
+  // For later
+
+  // private List<String> getGroupMenbersNames(String groupName) {
+  //   List<WebSocketSession> groupMemberSessions = groupSessionsMap.getOrDefault(groupName, new ArrayList<>());  
+  //   List<String> groupMemberNames = new ArrayList<>();
+  //   for (WebSocketSession session : groupMemberSessions) {
+  //     groupMemberNames.add(sessionNameMap.getOrDefault(session, ""));
+  //   }
+  //   return groupMemberNames;
+  // }
 
   private void sendListMessage(WebSocketSession session, String contentType, List<String> message) {
     try {

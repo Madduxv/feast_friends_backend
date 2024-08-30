@@ -160,6 +160,18 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   public void joinGroup(WebSocketSession session, String groupName) {
+
+    redisService.sendKVCommand("SADD", groupName, session.toString()).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
     if (sessionGroupMap.containsKey(session)) {
       String oldGroup = sessionGroupMap.get(session);
       if (!oldGroup.equals(groupName)) {
@@ -224,6 +236,18 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
     requestedRestaurants.computeIfAbsent(session, k -> new ArrayList<>()).add(restaurant);
+
+    redisService.sendKFVCommand("LPUSH", session.toString(), "restaurants", restaurant).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
   }
 
   private boolean addDoneMember(String groupName) {

@@ -51,10 +51,12 @@ public class RedisService {
   }
 
   // SADD, SREM, ...
-  public String sendKVCommand(String command, String key, String value) {
-    out.printf("\n%s\n%s\n%s\n", command, key, value);
-    out.flush();
-    return getResponse();
+  public CompletableFuture<String> sendKVCommand(String command, String key, String value) {
+    return CompletableFuture.supplyAsync(() -> {
+      out.printf("\n%s\n%s\n%s\n", command, key, value);
+      out.flush();
+      return getResponse();
+    });
   }
 
   // DEL, ...

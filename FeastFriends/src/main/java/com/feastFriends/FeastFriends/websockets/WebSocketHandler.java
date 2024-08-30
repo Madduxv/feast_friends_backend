@@ -104,7 +104,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
       case "name": // find user page
         addSessionName(session, content); // content = name
-        redisService.sendPingCommandAsync().thenAccept(response -> {
+        redisService.sendPingCommand().thenAccept(response -> {
           if (response != null) {
             System.out.println(response);
           } else {

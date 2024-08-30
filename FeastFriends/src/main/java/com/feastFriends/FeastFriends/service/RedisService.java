@@ -41,31 +41,32 @@ public class RedisService {
     }
   }
 
-  public String sendKFVCommand(String command, String key, String field, String value) {
-    out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, value);
-    out.flush();
-    return getResponse();
+  // HGET, HSET, ...
+  public CompletableFuture<String> sendKFVCommand(String command, String key, String field, String value) {
+    return CompletableFuture.supplyAsync(() -> {
+      out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, value);
+      out.flush();
+      return getResponse();
+    });
   }
 
+  // SADD, SREM, ...
   public String sendKVCommand(String command, String key, String value) {
     out.printf("\n%s\n%s\n%s\n", command, key, value);
     out.flush();
     return getResponse();
   }
 
-  public String sendKCommand(String command, String key) {
-    out.printf("\n%s\n%s\n", command, key);
-    out.flush();
-    return getResponse();
+  // DEL, ...
+  public CompletableFuture<String> sendKCommand(String command, String key) {
+    return CompletableFuture.supplyAsync(() -> {
+      out.printf("\n%s\n%s\n", command, key);
+      out.flush();
+      return getResponse();
+    });
   }
 
-  public String sendPingCommand() {
-    out.print("\nPING\n");
-    out.flush();
-    return getResponse();
-  }
-
-  public CompletableFuture<String> sendPingCommandAsync() {
+  public CompletableFuture<String> sendPingCommand() {
     return CompletableFuture.supplyAsync(() -> {
       out.print("PING\r\n");
       out.flush();

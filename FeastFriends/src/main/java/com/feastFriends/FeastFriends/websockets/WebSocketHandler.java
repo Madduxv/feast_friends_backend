@@ -5,6 +5,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,6 +15,7 @@ import com.feastFriends.feastFriends.model.StringResponseMessage;
 import com.feastFriends.feastFriends.model.Friend;
 import com.feastFriends.feastFriends.service.RestaurantService;
 import com.feastFriends.feastFriends.service.UserService;
+import com.feastFriends.feastFriends.service.RedisService;
 
 import java.util.Map;
 import java.util.Collections;
@@ -21,12 +23,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
-
+import jakarta.annotation.PostConstruct;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
-// Yes I know redis would wouk better. I will implement it later.
+  // Yes I know redis would wouk better. I will implement it later.
   private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
   private final Map<String, WebSocketSession> nameSessionMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
@@ -34,13 +36,39 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private final Map<WebSocketSession, List<String>> requestedGenres = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, List<String>> requestedRestaurants = new ConcurrentHashMap<>();
   private final Map<String, Integer> groupDoneMap = new ConcurrentHashMap<>();
-  // private final Map<String, Integer> groupActiveMap = new ConcurrentHashMap<>();
+  // private final Map<String, Integer> groupActiveMap = new
+  // ConcurrentHashMap<>();
+
+  // private final RestaurantService restaurantService;
+  // private final UserService userService;
+  // private final RedisService redisService;
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
 
   @Autowired
-  private UserService userService; 
+  private UserService userService;
+
+  private RedisService redisService;
+
+  @Value("${redis.host}")
+  private String redisHost;
+
+  @Value("${redis.port}")
+  private int redisPort;
+
+  @PostConstruct
+  public void init() {
+    try {
+      redisService = new RedisService(redisHost, redisPort);
+      // Further initialization if needed
+    } catch (Exception e) {
+      // Handle exception, log the error, or take corrective actions
+      e.printStackTrace();
+      System.err.println("Failed to initialize RedisService: " + e.getMessage());
+      // You might want to rethrow the exception or handle it based on your needs
+    }
+  }
 
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -52,18 +80,19 @@ public class WebSocketHandler extends TextWebSocketHandler {
     String payload = message.getPayload();
     // Assume payload is a JSON string with action and groupName or message
     // For example: {"action": "join", "content": "Maddux's Group"}
-    //              {"action": "addGenre", "content": "ITALIAN"}
-    //              {"action": "addGenre", "content": "AMERICAN"}
-    //              {"action": "addGenre", "content": "JAPANESE"}
-    //              {"action": "getRequestedGenres", "content": "Maddux's Group"}
-    //              {"action": "done", "content": "Maddux's Group"}
-    //              {"action": "getGenreMatches", "content": "Maddux's Group"}
-    //              {"action": "getRestaurantChoices", "content": "Maddux's Group"}
-    //              {"action": "addRestaurant", "content": "Burger King"}
-    //              {"action": "addRestaurant", "content": "Ichiban"}
-    //              {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
-    //              {"action": "done", "content": "Maddux's Group"}
-    //              {"action": "getRestaurantMatches", "content": "Maddux's Group"}
+    // {"action": "name", "content": "Maddux"}
+    // {"action": "addGenre", "content": "ITALIAN"}
+    // {"action": "addGenre", "content": "AMERICAN"}
+    // {"action": "addGenre", "content": "JAPANESE"}
+    // {"action": "getRequestedGenres", "content": "Maddux's Group"}
+    // {"action": "done", "content": "Maddux's Group"}
+    // {"action": "getGenreMatches", "content": "Maddux's Group"}
+    // {"action": "getRestaurantChoices", "content": "Maddux's Group"}
+    // {"action": "addRestaurant", "content": "Burger King"}
+    // {"action": "addRestaurant", "content": "Ichiban"}
+    // {"action": "getRequestedRestaurants", "content": "Maddux's Group"}
+    // {"action": "done", "content": "Maddux's Group"}
+    // {"action": "getRestaurantMatches", "content": "Maddux's Group"}
 
     Map<String, String> data = parsePayload(payload);
     String action = data.get("action");
@@ -75,11 +104,22 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
       case "name": // find user page
         addSessionName(session, content); // content = name
+        redisService.sendPingCommandAsync().thenAccept(response -> {
+          if (response != null) {
+            System.out.println(response);
+          } else {
+            System.out.println("No response received");
+          }
+        }).exceptionally(ex -> {
+          // Handle any exceptions that occur during the async operation
+          ex.printStackTrace();
+          return null;
+        });
         break;
       case "friendsGroups": // find user page
         getUserActiveFriendsGroups(session);
         break;
-      case "done": //genres and restaurants page
+      case "done": // genres and restaurants page
         if (addDoneMember(content)) {
           groupDoneMap.put(content, 0);
           broadcastMessageToGroup(session, "groupDoneStatus", "Everyone is done");
@@ -107,7 +147,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "getRequestedRestaurants": // restaurant page debug
         sendListMessage(session, "groupRestaurants", getRequestedRestaurantsForGroup(content)); // content = groupName
         break;
-      case "getRestaurantMatches": // results  page
+      case "getRestaurantMatches": // results page
         List<String> restaurants = getRequestedRestaurantsForGroup(content); // content = groupName
         sendListMessage(session, "restaurantMatches", getMatches(content, restaurants));
         break;
@@ -119,7 +159,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private Map<String, String> parsePayload(String payload) {
     ObjectMapper objectMapper = new ObjectMapper();
     try {
-      Map<String, String> map = objectMapper.readValue(payload, new TypeReference<Map<String,String>>(){});
+      Map<String, String> map = objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {
+      });
       return map;
     } catch (Exception e) {
       e.printStackTrace();
@@ -185,30 +226,30 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   // private List<String> getUserActiveFriends(WebSocketSession session) {
   //
-  //   List<String> userActiveFriends = new ArrayList<>();
-  //   String name = sessionNameMap.getOrDefault(session, null);
-  //   if(name==null) {
-  //     sendStringMessage(session, "noName", "You have not provided a name");
-  //     return new ArrayList<String>();
-  //   }
-  //   List<Friend> usersFriends = userService.getFriends(name);
-  //   List<String> usersFriendsNames = new ArrayList<>();
-  //   for (Friend friend : usersFriends) {
-  //     usersFriendsNames.add(friend.getName());
-  //   }
-  //   for (String friendName: usersFriendsNames) {
-  //     if (nameSessionMap.containsKey(friendName)) {
-  //       userActiveFriends.add(friendName);
-  //     }
-  //   }
-  //   return userActiveFriends;
+  // List<String> userActiveFriends = new ArrayList<>();
+  // String name = sessionNameMap.getOrDefault(session, null);
+  // if(name==null) {
+  // sendStringMessage(session, "noName", "You have not provided a name");
+  // return new ArrayList<String>();
+  // }
+  // List<Friend> usersFriends = userService.getFriends(name);
+  // List<String> usersFriendsNames = new ArrayList<>();
+  // for (Friend friend : usersFriends) {
+  // usersFriendsNames.add(friend.getName());
+  // }
+  // for (String friendName: usersFriendsNames) {
+  // if (nameSessionMap.containsKey(friendName)) {
+  // userActiveFriends.add(friendName);
+  // }
+  // }
+  // return userActiveFriends;
   // }
 
   private void getUserActiveFriendsGroups(WebSocketSession session) {
     List<String> userActiveFriendsGroups = new ArrayList<>();
     String friendsGroup;
     String name = sessionNameMap.getOrDefault(session, null);
-    if(name==null) {
+    if (name == null) {
       sendStringMessage(session, "noName", "You have not provided a name");
       return;
     }
@@ -217,7 +258,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     for (Friend friend : usersFriends) {
       usersFriendsNames.add(friend.getName());
     }
-    for (String friendName: usersFriendsNames) {
+    for (String friendName : usersFriendsNames) {
       if (nameSessionMap.containsKey(friendName)) {
         friendsGroup = sessionGroupMap.getOrDefault(nameSessionMap.get(friendName), "");
         if (!userActiveFriendsGroups.contains(friendsGroup)) {
@@ -227,22 +268,24 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
     sendListMessage(session, "activeFriendsGroups", userActiveFriendsGroups);
   }
-  
+
   // This is a maybe
 
-  // private void broadcastGroupToFriends(WebSocketSession session, String groupName) { 
-  //   String name = sessionNameMap.getOrDefault(session, null);
-  //   List<String> userAndGroup = new ArrayList<>();
-  //   if(name==null) {
-  //     sendStringMessage(session, "noName", "You have not provided a name");
-  //     return;
-  //   }
-  //   List<String> userActiveFriends = getUserActiveFriends(session);
-  //   for (String friend : userActiveFriends) {
-  //     sendListMessage(nameSessionMap.get(friend), "newActiveFriend" , userAndGroup);
-  //   }
+  // private void broadcastGroupToFriends(WebSocketSession session, String
+  // groupName) {
+  // String name = sessionNameMap.getOrDefault(session, null);
+  // List<String> userAndGroup = new ArrayList<>();
+  // if(name==null) {
+  // sendStringMessage(session, "noName", "You have not provided a name");
+  // return;
   // }
-    
+  // List<String> userActiveFriends = getUserActiveFriends(session);
+  // for (String friend : userActiveFriends) {
+  // sendListMessage(nameSessionMap.get(friend), "newActiveFriend" ,
+  // userAndGroup);
+  // }
+  // }
+
   private Integer getGroupSize(String groupName) {
     return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;
   }
@@ -250,12 +293,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
   // For later
 
   // private List<String> getGroupMenbersNames(String groupName) {
-  //   List<WebSocketSession> groupMemberSessions = groupSessionsMap.getOrDefault(groupName, new ArrayList<>());  
-  //   List<String> groupMemberNames = new ArrayList<>();
-  //   for (WebSocketSession session : groupMemberSessions) {
-  //     groupMemberNames.add(sessionNameMap.getOrDefault(session, ""));
-  //   }
-  //   return groupMemberNames;
+  // List<WebSocketSession> groupMemberSessions =
+  // groupSessionsMap.getOrDefault(groupName, new ArrayList<>());
+  // List<String> groupMemberNames = new ArrayList<>();
+  // for (WebSocketSession session : groupMemberSessions) {
+  // groupMemberNames.add(sessionNameMap.getOrDefault(session, ""));
+  // }
+  // return groupMemberNames;
   // }
 
   private void sendListMessage(WebSocketSession session, String contentType, List<String> message) {

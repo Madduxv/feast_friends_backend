@@ -104,17 +104,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
       case "name": // find user page
         addSessionName(session, content); // content = name
-        redisService.sendPingCommand().thenAccept(response -> {
-          if (response != null) {
-            System.out.println(response);
-          } else {
-            System.out.println("No response received");
-          }
-        }).exceptionally(ex -> {
-          // Handle any exceptions that occur during the async operation
-          ex.printStackTrace();
-          return null;
-        });
         break;
       case "friendsGroups": // find user page
         getUserActiveFriendsGroups(session);
@@ -202,11 +191,34 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   private void addRequestedGenre(WebSocketSession session, String genre) {
     requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
+    redisService.sendKFVCommand("LPUSH", session.toString(), "genres", genre).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
   }
 
   private void addSessionName(WebSocketSession session, String name) {
     sessionNameMap.computeIfAbsent(session, k -> name);
     nameSessionMap.computeIfAbsent(name, k -> session);
+
+    redisService.sendKFVCommand("HSET", session.toString(), "name", name).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
     sendStringMessage(session, "name", "nameSet");
   }
 

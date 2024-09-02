@@ -79,8 +79,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
   public void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
     String payload = message.getPayload();
     // Assume payload is a JSON string with action and groupName or message
-    // For example: {"action": "join", "content": "Maddux's Group"}
+    // For example:
     // {"action": "name", "content": "Maddux"}
+    // {"action": "join", "content": "Maddux's Group"}
     // {"action": "addGenre", "content": "ITALIAN"}
     // {"action": "addGenre", "content": "AMERICAN"}
     // {"action": "addGenre", "content": "JAPANESE"}
@@ -191,7 +192,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
     String groupName = sessionGroupMap.get(senderSession);
     List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
-
+    redisService.sendKCommand("SGET", groupName).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
     if (groupSessions != null) {
       for (WebSocketSession session : groupSessions) {
         if (session.isOpen()) {
@@ -203,7 +214,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   private void addRequestedGenre(WebSocketSession session, String genre) {
     requestedGenres.computeIfAbsent(session, k -> new ArrayList<>()).add(genre);
-    redisService.sendKFVCommand("LPUSH", session.toString(), "genres", genre).thenAccept(response -> {
+    redisService.sendKFVCommand("RPUSH", session.toString(), "genres", genre).thenAccept(response -> {
       if (response != null) {
         System.out.println(response);
       } else {
@@ -237,7 +248,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
     requestedRestaurants.computeIfAbsent(session, k -> new ArrayList<>()).add(restaurant);
 
-    redisService.sendKFVCommand("LPUSH", session.toString(), "restaurants", restaurant).thenAccept(response -> {
+    redisService.sendKFVCommand("RPUSH", session.toString(), "restaurants", restaurant).thenAccept(response -> {
       if (response != null) {
         System.out.println(response);
       } else {
@@ -251,6 +262,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private boolean addDoneMember(String groupName) {
+    redisService.sendKCommand("INCR", groupName).thenAccept(response -> {
+      if (response != null) {
+        System.out.println(response);
+      } else {
+        System.out.println("No response received");
+      }
+    }).exceptionally(ex -> {
+      // Handle any exceptions that occur during the async operation
+      ex.printStackTrace();
+      return null;
+    });
     groupDoneMap.compute(groupName, (key, value) -> (value == null) ? 0 : value + 1);
     if (getGroupSize(groupName) == groupDoneMap.get(groupName)) {
       return true;

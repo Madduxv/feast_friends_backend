@@ -41,6 +41,14 @@ public class RedisService {
     }
   }
 
+  public CompletableFuture<String> sendKFSECommand(String command, String key, String field, int start, int end) {
+    return CompletableFuture.supplyAsync(() -> {
+      out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, start, end);
+      out.flush();
+      return getResponse();
+    });
+  }
+
   // HGET, HSET, ...
   public CompletableFuture<String> sendKFVCommand(String command, String key, String field, String value) {
     return CompletableFuture.supplyAsync(() -> {

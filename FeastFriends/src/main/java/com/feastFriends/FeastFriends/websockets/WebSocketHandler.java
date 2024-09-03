@@ -6,6 +6,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.graphql.GraphQlProperties.Websocket;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -504,7 +505,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
           List<CompletableFuture<Void>> futures = new ArrayList<>();
 
           for (String session : sessions) {
-            CompletableFuture<Void> future = redisService.sendKVCommand("SGET", session, "genres")
+            CompletableFuture<Void> future = redisService.sendKFSECommand("LRANGE", session, "genres", 0, -1)
                 .thenAccept(genresData -> {
                   if (genresData != null && !genresData.isEmpty()) {
                     genres.addAll(Arrays.asList(genresData.split(",")));
@@ -536,7 +537,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
           List<CompletableFuture<Void>> futures = new ArrayList<>();
 
           for (String session : sessions) {
-            CompletableFuture<Void> future = redisService.sendKVCommand("SGET", session, "restaurants")
+            CompletableFuture<Void> future = redisService.sendKFSECommand("LRANGE", session, "restaurants", 0, -1)
                 .thenAccept(restaurantsData -> {
                   if (restaurantsData != null && !restaurantsData.isEmpty()) {
                     restaurants.addAll(Arrays.asList(restaurantsData.split(",")));

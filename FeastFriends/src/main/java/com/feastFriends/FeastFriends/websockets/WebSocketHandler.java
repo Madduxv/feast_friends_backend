@@ -30,7 +30,10 @@ import jakarta.annotation.PostConstruct;
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
+  private final Map<String, WebSocketSession> sessionMap = new ConcurrentHashMap<>();
+
   // Yes I know redis would wouk better. I will implement it later.
+  // (later has arrived)
   private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
   private final Map<String, WebSocketSession> nameSessionMap = new ConcurrentHashMap<>();
   private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
@@ -77,6 +80,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
     // Initialize session data if needed
+    sessionMap.put(session.getId(), session);
   }
 
   @Override
@@ -108,6 +112,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       case "test":
         redisService.testRedis();
         break;
+
       case "join": // find user page
         joinGroup(session, content); // content = groupName
         break;
@@ -232,7 +237,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   public void joinGroup(WebSocketSession session, String groupName) {
-
+    // HGET sessionId name
+    // SADD groupName name
+    // if oldGroup := HGET sessionId group; oldGroup != (nil) ->
+    // SREM oldGroup name
+    // HSET sessionId group groupName
     String sessionId = session.getId();
     redisService.sendKVCommand("SADD", groupName, sessionId).thenAccept(response -> {
       if (response != null) {
@@ -260,6 +269,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
+    // memberNames = SGET groupName
+    // for name:mamberNames ->
+    // sessions.add(GET name.toSession)
+    // for session:sessions ->
+    // sendStringMessage(session, contentType, message)
     String groupName = sessionGroupMap.get(senderSession);
     List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
     redisService.sendKCommand("SGET", groupName).thenAccept(response -> {
@@ -314,6 +328,20 @@ public class WebSocketHandler extends TextWebSocketHandler {
         return null;
       });
     });
+    redisService.addCommandToQueue(() -> {
+      String sessionId = session.getId();
+      redisService.sendKVCommand("SET", name, sessionId).thenAccept(response -> {
+        if (response != null) {
+          System.out.println(response);
+        } else {
+          System.out.println("No response received");
+        }
+      }).exceptionally(ex -> {
+        // Handle any exceptions that occur during the async operation
+        ex.printStackTrace();
+        return null;
+      });
+    });
   }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
@@ -333,6 +361,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private boolean addDoneMember(String groupName) {
+    // INCR groupName + ":DoneMembers"
+    // SCARD groupName = nuOfGroupMembers
+    // GET groupName + ":DoneMembers" = numOfDoneMembers
+    // if nuOfGroupMembers == numOfDoneMembers ->
+    // return true // else return false
     redisService.addCommandToQueue(() -> {
       redisService.sendKCommand("INCR", groupName).thenAccept(response -> {
         if (response != null) {
@@ -354,6 +387,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private void getUserActiveFriendsGroups(WebSocketSession session) {
+    // name = hget session name
+    // friends = userv.getfriends(name)
+    // for friend : friends ->
+    // if get friend != "" ->
+    // if hget friend group !in friendGroups ->
+    // friendGroups.add(hget friend group)
+    // return friendGroups
     List<String> userActiveFriendsGroups = new ArrayList<>();
     String friendsGroup;
     String name = sessionNameMap.getOrDefault(session, null);
@@ -405,6 +445,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   @Override
   public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    // hget session name
+    // hget session group
+    // del session
+    // rem name
+    // srem group name
+    // if group is empty ->
+    // sdel group
     super.afterConnectionClosed(session, status);
 
     String groupName = sessionGroupMap.get(session);
@@ -417,60 +464,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
 
     sessionGroupMap.remove(session);
+    sessionMap.remove(session.getId()); // keep this here
   }
-
-  // public CompletableFuture<List<String>> getRequestedGenresForGroup(String
-  // groupName) {
-  // List<String> genres = new ArrayList<>();
-  //
-  // return redisService.sendKCommand("SGET", groupName)
-  // .thenCompose(sessionsData -> {
-  // if (sessionsData == null || sessionsData.isEmpty()) {
-  // return CompletableFuture.completedFuture(genres);
-  // }
-  //
-  // String[] sessions = sessionsData.split(",");
-  // List<CompletableFuture<Void>> futures = new ArrayList<>();
-  //
-  // for (String session : sessions) {
-  // CompletableFuture<Void> future = new CompletableFuture<>();
-  //
-  // redisService.addCommandToQueue(() -> {
-  // redisService.sendKFSECommand("LRANGE", session, "genres", "0", "-1")
-  // .thenAccept(genresData -> {
-  // if (genresData != null && !genresData.isEmpty()) {
-  // synchronized (genres) {
-  // System.out.println("Genres data for session " + session + ": " + genresData);
-  // genres.addAll(Arrays.asList(genresData.split(",")));
-  // }
-  // }
-  // future.complete(null);
-  // })
-  // .exceptionally(ex -> {
-  // ex.printStackTrace();
-  // future.completeExceptionally(ex);
-  // return null;
-  // });
-  // });
-  //
-  // futures.add(future);
-  // }
-  //
-  // return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-  // .thenApply(v -> genres);
-  // })
-  // .exceptionally(ex -> {
-  // ex.printStackTrace();
-  // return genres; // Return the genres collected so far or an empty list if
-  // something goes wrong
-  // });
-  // }
 
   public CompletableFuture<List<String>> getRequestedGenresForGroup(String groupName) {
     List<String> genres = new ArrayList<>();
 
     return CompletableFuture.supplyAsync(() -> {
-      // Step 1: Queue and execute the SGET command
       CompletableFuture<String> sgetFuture = new CompletableFuture<>();
 
       redisService.addCommandToQueue(() -> redisService.sendKCommand("SGET", groupName)
@@ -484,7 +484,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
       return sgetFuture;
     }).thenCompose(sessionsDataFuture -> {
-      // Step 2: Handle the response from SGET
       return sessionsDataFuture.thenCompose(sessionsData -> {
         if (sessionsData == null || sessionsData.isEmpty()) {
           return CompletableFuture.completedFuture(genres);
@@ -496,7 +495,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
         for (String session : sessions) {
           CompletableFuture<Void> future = new CompletableFuture<>();
 
-          // Step 3: Queue and execute LRANGE commands for each session
           redisService.addCommandToQueue(() -> redisService.sendKFSECommand("LRANGE", session, "genres", "0", "-1")
               .thenAccept(genresData -> {
                 if (genresData != null && !genresData.isEmpty()) {
@@ -513,8 +511,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
           futures.add(future);
         }
 
-        // Step 4: Ensure all LRANGE commands have completed before returning the genres
-        // list
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .thenApply(v -> genres);
       });
@@ -530,7 +526,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
     return CompletableFuture.supplyAsync(() -> {
       CompletableFuture<String> sgetFuture = new CompletableFuture<>();
 
-      // Queue the SGET command
       redisService.addCommandToQueue(() -> redisService.sendKCommand("SGET", groupName)
           .thenAccept(response -> {
             sgetFuture.complete(response);
@@ -542,7 +537,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
       return sgetFuture;
     }).thenCompose(sessionsDataFuture -> {
-      // Handle the response from the SGET command
       return sessionsDataFuture.thenCompose(sessionsData -> {
         if (sessionsData == null || sessionsData.isEmpty()) {
           return CompletableFuture.completedFuture(restaurants);
@@ -553,7 +547,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
         for (String session : sessions) {
           CompletableFuture<Void> future = new CompletableFuture<>();
-          // Queue the LRANGE commands for each session
           redisService.addCommandToQueue(() -> redisService.sendKFSECommand("LRANGE", session, "restaurants", "0", "-1")
               .thenAccept(restaurantsData -> {
                 if (restaurantsData != null && !restaurantsData.isEmpty()) {
@@ -579,55 +572,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
       return restaurants;
     });
   }
-
-  // public CompletableFuture<List<String>> getRequestedRestaurantsForGroup(String
-  // groupName) {
-  // List<String> restaurants = new ArrayList<>();
-  //
-  // return redisService.sendKCommand("SGET", groupName)
-  // .thenCompose(sessionsData -> {
-  // if (sessionsData == null || sessionsData.isEmpty()) {
-  // return CompletableFuture.completedFuture(restaurants);
-  // }
-  //
-  // String[] sessions = sessionsData.split(",");
-  // List<CompletableFuture<Void>> futures = new ArrayList<>();
-  //
-  // for (String session : sessions) {
-  // CompletableFuture<Void> future = new CompletableFuture<>();
-  //
-  // redisService.addCommandToQueue(() -> {
-  // redisService.sendKFSECommand("LRANGE", session, "restaurants", "0", "-1")
-  // .thenAccept(restaurantsData -> {
-  // if (restaurantsData != null && !restaurantsData.isEmpty()) {
-  // synchronized (restaurants) {
-  // System.out.println("Restaurants data for session " + session + ": " +
-  // restaurantsData);
-  // restaurants.addAll(Arrays.asList(restaurantsData.split(",")));
-  // }
-  // }
-  // future.complete(null);
-  // })
-  // .exceptionally(ex -> {
-  // ex.printStackTrace();
-  // future.completeExceptionally(ex);
-  // return null;
-  // });
-  // });
-  //
-  // futures.add(future);
-  // }
-  //
-  // return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-  // .thenApply(v -> restaurants);
-  // })
-  // .exceptionally(ex -> {
-  // ex.printStackTrace();
-  // return restaurants; // Return the restaurants collected so far or an empty
-  // list if something goes
-  // // wrong
-  // });
-  // }
 
   public List<String> getMatches(String groupName, List<String> requests) {
     int groupLength = groupSessionsMap.get(groupName).size();

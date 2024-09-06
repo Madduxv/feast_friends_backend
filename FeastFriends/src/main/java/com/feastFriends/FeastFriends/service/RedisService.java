@@ -30,6 +30,7 @@ public class RedisService {
         // dont care
       }
     });
+    testRedis();
 
   }
 

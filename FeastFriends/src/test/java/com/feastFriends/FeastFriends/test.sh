@@ -18,6 +18,8 @@
   sleep 2
   printf "{\"action\": \"addRestaurant\", \"content\": \"Ichiban\"}\n"
   sleep 2
+  printf "{\"action\": \"addRestaurant\", \"content\": \"Texas Roadhouse\"}\n"
+  sleep 2
   printf "{\"action\": \"getRequestedRestaurants\", \"content\": \"Maddux's Group\"}\n"
   sleep 5
 } | websocat ws://localhost:8080/ws

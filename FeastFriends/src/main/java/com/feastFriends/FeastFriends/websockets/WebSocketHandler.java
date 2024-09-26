@@ -137,10 +137,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
 
       case "getRequestedGenres": // genre page debug
-        getRequestedGenresForGroup(content)
+        getRequestedGenresForGroup(content) // content = groupName
             .thenAccept(genres -> {
               if (genres != null && !genres.isEmpty()) {
-                sendListMessage(session, "genres", genres); // content = groupName
+                sendListMessage(session, "genres", genres);
               } else {
                 System.out.println("No genres found for the group.");
               }
@@ -152,7 +152,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
 
       case "getGenreMatches": // user complete waiting page
-        getRequestedGenresForGroup(content)
+        getRequestedGenresForGroup(content) // content = groupName
             .thenAccept(genres -> {
               if (genres != null && !genres.isEmpty()) {
                 sendListMessage(session, "genreMatches", getMatches(content, genres));
@@ -188,7 +188,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
 
       case "getRequestedRestaurants": // restaurant page debug
-        getRequestedRestaurantsForGroup(content)
+        getRequestedRestaurantsForGroup(content) // content = groupName
             .thenAccept(restaurants -> {
               if (restaurants != null && !restaurants.isEmpty()) {
                 sendListMessage(session, "groupRestaurants", restaurants);
@@ -203,7 +203,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
 
       case "getRestaurantMatches": // results page
-        getRequestedRestaurantsForGroup(content)
+        getRequestedRestaurantsForGroup(content) // content = groupName
             .thenAccept(restaurants -> {
               if (restaurants != null && !restaurants.isEmpty()) {
                 sendListMessage(session, "restaurantMatches", getMatches(content, restaurants));
@@ -231,41 +231,43 @@ public class WebSocketHandler extends TextWebSocketHandler {
     } catch (Exception e) {
       e.printStackTrace();
     }
-    // Implement JSON parsing logic here
-    // Return a map of key-value pairs from the JSON payload
     return new HashMap<>();
   }
 
   public void joinGroup(WebSocketSession session, String groupName) {
+    String sessionId = session.getId();
+
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKVCommand("HGET", sessionId, "name").thenAccept(name -> {
+        if (name != null) {
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKVCommand("SADD", groupName, name);
+          });
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKVCommand("HGET", sessionId, "group").thenAccept(response -> {
+              if (response != null && response != groupName && response != "(nil)") {
+                redisService.addCommandToQueue(() -> {
+                  redisService.sendKVCommand("SREM", response, name);
+                });
+              }
+              redisService.addCommandToQueue(() -> {
+                redisService.sendKFVCommand("HSET", sessionId, "group", groupName);
+                System.out.printf("Session %s joined %s\n", sessionId, groupName);
+              });
+            });
+          });
+        } else {
+          System.out.println("Error getting sessions name");
+        }
+      });
+    });
+
     // HGET sessionId name
     // SADD groupName name
-    // if oldGroup := HGET sessionId group; oldGroup != (nil) ->
+    // if oldGroup := HGET sessionId group; oldGroup != (nil) ...
+    // && oldGroup != groupName ->
     // SREM oldGroup name
     // HSET sessionId group groupName
-    String sessionId = session.getId();
-    redisService.sendKVCommand("SADD", groupName, sessionId).thenAccept(response -> {
-      if (response != null) {
-        System.out.println(response);
-      } else {
-        System.out.println("No response received");
-      }
-    }).exceptionally(ex -> {
-      // Handle any exceptions that occur during the async operation
-      ex.printStackTrace();
-      return null;
-    });
-    if (sessionGroupMap.containsKey(session)) {
-      String oldGroup = sessionGroupMap.get(session);
-      if (!oldGroup.equals(groupName)) {
-        groupSessionsMap.get(oldGroup).remove(session);
-        if (groupSessionsMap.get(oldGroup).isEmpty()) {
-          groupSessionsMap.remove(oldGroup);
-        }
-      }
-    }
-    sessionGroupMap.put(session, groupName);
-    groupSessionsMap.computeIfAbsent(groupName, k -> new ArrayList<>()).add(session);
-    groupDoneMap.putIfAbsent(groupName, 0);
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
@@ -277,9 +279,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     String groupName = sessionGroupMap.get(senderSession);
     List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
     redisService.sendKCommand("SGET", groupName).thenAccept(response -> {
-      if (response != null) {
-        System.out.println(response);
-      } else {
+      if (response == null) {
         System.out.println("No response received");
       }
     }).exceptionally(ex -> {
@@ -300,9 +300,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     redisService.addCommandToQueue(() -> {
       String sessionId = session.getId();
       redisService.sendKFVCommand("RPUSH", sessionId, "genres", genre).thenAccept(response -> {
-        if (response != null) {
-          System.out.println(response);
-        } else {
+        if (response == null) {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {
@@ -317,9 +315,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     redisService.addCommandToQueue(() -> {
       String sessionId = session.getId();
       redisService.sendKFVCommand("HSET", sessionId, "name", name).thenAccept(response -> {
-        if (response != null) {
-          System.out.println(response);
-        } else {
+        if (response == null) {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {
@@ -331,9 +327,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     redisService.addCommandToQueue(() -> {
       String sessionId = session.getId();
       redisService.sendKVCommand("SET", name, sessionId).thenAccept(response -> {
-        if (response != null) {
-          System.out.println(response);
-        } else {
+        if (response == null) {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {

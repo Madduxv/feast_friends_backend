@@ -336,6 +336,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         return null;
       });
     });
+    sendStringMessage(session, "name", "");
   }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {

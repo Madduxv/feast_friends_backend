@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PostConstruct;
+import jdk.internal.net.http.common.SequentialScheduler.CompleteRestartableTask;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
@@ -126,10 +127,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
         break;
 
       case "done": // genres and restaurants page
-        if (addDoneMember(content)) {
-          groupDoneMap.put(content, 0);
-          broadcastMessageToGroup(session, "groupDoneStatus", "Everyone is done");
-        }
+        addDoneMember(content).thenAccept(groupDone -> {
+          if (groupDone) {
+            broadcastMessageToGroup(session, "groupDoneStatus", "Everyone is done");
+          }
+        });
         break;
 
       case "addGenre": // genre page
@@ -142,7 +144,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
               if (genres != null && !genres.isEmpty()) {
                 sendListMessage(session, "genres", genres);
               } else {
-                System.out.println("No genres found for the group.");
+                sendListMessage(session, "genres", new ArrayList<>());
               }
             })
             .exceptionally(ex -> {
@@ -157,7 +159,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
               if (genres != null && !genres.isEmpty()) {
                 sendListMessage(session, "genreMatches", getMatches(content, genres));
               } else {
-                System.out.println("No restaurants found for the group.");
+                sendListMessage(session, "genreMatches", new ArrayList<>());
               }
             })
             .exceptionally(ex -> {
@@ -174,7 +176,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 sendListMessage(session, "restaurants",
                     restaurantService.getRestaurantsWithRequestedGenre(genreMatches));
               } else {
-                System.out.println("No genres found for the group.");
+                sendListMessage(session, "restaurants", new ArrayList<>());
               }
             })
             .exceptionally(ex -> {
@@ -193,7 +195,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
               if (restaurants != null && !restaurants.isEmpty()) {
                 sendListMessage(session, "groupRestaurants", restaurants);
               } else {
-                System.out.println("No restaurants found for the group.");
+                sendListMessage(session, "groupRestaurants", new ArrayList<>());
               }
             })
             .exceptionally(ex -> {
@@ -208,7 +210,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
               if (restaurants != null && !restaurants.isEmpty()) {
                 sendListMessage(session, "restaurantMatches", getMatches(content, restaurants));
               } else {
-                System.out.println("No restaurants found for the group.");
+                sendListMessage(session, "restaurantMatches", new ArrayList<>());
               }
             })
             .exceptionally(ex -> {
@@ -261,13 +263,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
         }
       });
     });
-
-    // HGET sessionId name
-    // SADD groupName name
-    // if oldGroup := HGET sessionId group; oldGroup != (nil) ...
-    // && oldGroup != groupName ->
-    // SREM oldGroup name
-    // HSET sessionId group groupName
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
@@ -283,7 +278,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
         System.out.println("No response received");
       }
     }).exceptionally(ex -> {
-      // Handle any exceptions that occur during the async operation
       ex.printStackTrace();
       return null;
     });
@@ -304,7 +298,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {
-        // Handle any exceptions that occur during the async operation
         ex.printStackTrace();
         return null;
       });
@@ -331,7 +324,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {
-        // Handle any exceptions that occur during the async operation
         ex.printStackTrace();
         return null;
       });
@@ -355,30 +347,51 @@ public class WebSocketHandler extends TextWebSocketHandler {
     });
   }
 
-  private boolean addDoneMember(String groupName) {
+  private CompletableFuture<Boolean> addDoneMember(String groupName) {
     // INCR groupName + ":DoneMembers"
-    // SCARD groupName = nuOfGroupMembers
+    // SCARD groupName = numOfGroupMembers
     // GET groupName + ":DoneMembers" = numOfDoneMembers
     // if nuOfGroupMembers == numOfDoneMembers ->
     // return true // else return false
+    CompletableFuture<Boolean> groupDoneFuture = new CompletableFuture<>();
     redisService.addCommandToQueue(() -> {
-      redisService.sendKCommand("INCR", groupName).thenAccept(response -> {
-        if (response != null) {
-          System.out.println(response);
+      redisService.sendKCommand("INCR", groupName + ":DoneMembers").thenAccept(doneMembers -> {
+        if (doneMembers == null) {
+          System.out.println("No response received for INCR command");
+          return;
         } else {
-          System.out.println("No response received");
+
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKCommand("SCARD", groupName).thenAccept(groupMembers -> {
+              if (groupMembers == null) {
+                System.out.println("No response received for SCARD command");
+                return;
+              }
+              if (Integer.parseInt(doneMembers) != Integer.parseInt(groupMembers)) {
+                groupDoneFuture.complete(false);
+              } else {
+                groupDoneFuture.complete(true);
+              }
+
+            }).exceptionally(ex -> {
+              ex.printStackTrace();
+              return null;
+            });
+          });
         }
       }).exceptionally(ex -> {
-        // Handle any exceptions that occur during the async operation
         ex.printStackTrace();
         return null;
       });
     });
-    groupDoneMap.compute(groupName, (key, value) -> (value == null) ? 0 : value + 1);
-    if (getGroupSize(groupName) == groupDoneMap.get(groupName)) {
-      return true;
-    }
-    return false;
+    return groupDoneFuture;
+
+    // groupDoneMap.compute(groupName, (key, value) -> (value == null) ? 0 : value +
+    // 1);
+    // if (getGroupSize(groupName) == groupDoneMap.get(groupName)) {
+    // return true;
+    // }
+    // return false;
   }
 
   private void getUserActiveFriendsGroups(WebSocketSession session) {

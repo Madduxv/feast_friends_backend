@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PostConstruct;
-import jdk.internal.net.http.common.SequentialScheduler.CompleteRestartableTask;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
@@ -110,9 +109,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     switch (action) {
       // {"action": "test", "content": ""}
-      case "test":
-        redisService.testRedis();
-        break;
+      // case "test":
+      // redisService.testRedis();
+      // break;
 
       case "join": // find user page
         joinGroup(session, content); // content = groupName
@@ -348,11 +347,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private CompletableFuture<Boolean> addDoneMember(String groupName) {
-    // INCR groupName + ":DoneMembers"
-    // SCARD groupName = numOfGroupMembers
-    // GET groupName + ":DoneMembers" = numOfDoneMembers
-    // if nuOfGroupMembers == numOfDoneMembers ->
-    // return true // else return false
     CompletableFuture<Boolean> groupDoneFuture = new CompletableFuture<>();
     redisService.addCommandToQueue(() -> {
       redisService.sendKCommand("INCR", groupName + ":DoneMembers").thenAccept(doneMembers -> {
@@ -385,44 +379,65 @@ public class WebSocketHandler extends TextWebSocketHandler {
       });
     });
     return groupDoneFuture;
-
-    // groupDoneMap.compute(groupName, (key, value) -> (value == null) ? 0 : value +
-    // 1);
-    // if (getGroupSize(groupName) == groupDoneMap.get(groupName)) {
-    // return true;
-    // }
-    // return false;
   }
 
   private void getUserActiveFriendsGroups(WebSocketSession session) {
-    // name = hget session name
-    // friends = userv.getfriends(name)
-    // for friend : friends ->
-    // if get friend != "" ->
-    // if hget friend group !in friendGroups ->
-    // friendGroups.add(hget friend group)
-    // return friendGroups
-    List<String> userActiveFriendsGroups = new ArrayList<>();
-    String friendsGroup;
-    String name = sessionNameMap.getOrDefault(session, null);
-    if (name == null) {
-      sendStringMessage(session, "noName", "You have not provided a name");
-      return;
-    }
-    List<Friend> usersFriends = userService.getFriends(name);
+    CompletableFuture<List<String>> userActiveFriendsGroupsFuture = new CompletableFuture<>();
+    CompletableFuture<List<String>> userActiveFriendsFuture = new CompletableFuture<>();
     List<String> usersFriendsNames = new ArrayList<>();
-    for (Friend friend : usersFriends) {
-      usersFriendsNames.add(friend.getName());
-    }
-    for (String friendName : usersFriendsNames) {
-      if (nameSessionMap.containsKey(friendName)) {
-        friendsGroup = sessionGroupMap.getOrDefault(nameSessionMap.get(friendName), "");
-        if (!userActiveFriendsGroups.contains(friendsGroup)) {
-          userActiveFriendsGroups.add(friendsGroup);
+
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKVCommand("HGET", session.getId(), "name").thenAccept(name -> {
+        if (name == null || name.trim() == "") {
+          sendStringMessage(session, "noName", "You have not provided a name");
+          userActiveFriendsGroupsFuture.complete(new ArrayList<>());
+          return;
         }
-      }
+
+        List<Friend> usersFriends = userService.getFriends(name.trim());
+        for (Friend friend : usersFriends) {
+          usersFriendsNames.add(friend.getName());
+        }
+
+        redisService.addCommandToQueue(() -> {
+          List<String> activeFriends = new ArrayList<>();
+          for (String friendName : usersFriendsNames) {
+            redisService.sendKCommand("GET", friendName).thenAccept(friendSession -> {
+              if (friendSession != null && friendSession.trim() != "") {
+                activeFriends.add(friendSession);
+              }
+            });
+          }
+          userActiveFriendsFuture.complete(activeFriends);
+        });
+
+        redisService.addCommandToQueue(() -> {
+          try {
+            List<String> activeFriends = userActiveFriendsFuture.get();
+            List<String> activeGroups = new ArrayList<>();
+            for (String friend : activeFriends) {
+              redisService.addCommandToQueue(() -> {
+                redisService.sendKVCommand("HGET", friend, "group").thenAccept(group -> {
+                  if (!activeGroups.contains(group) && group != null && group.trim() != "") {
+                    activeGroups.add(group);
+                  }
+                });
+              });
+            }
+            userActiveFriendsGroupsFuture.complete(activeGroups);
+          } catch (Exception e) {
+            userActiveFriendsGroupsFuture.complete(new ArrayList<>());
+            e.printStackTrace();
+          }
+        });
+      });
+    });
+    try {
+      sendListMessage(session, "activeFriendsGroups", userActiveFriendsGroupsFuture.get());
+    } catch (Exception e) {
+      sendListMessage(session, "activeFriendsGroups", new ArrayList<>());
+      e.printStackTrace();
     }
-    sendListMessage(session, "activeFriendsGroups", userActiveFriendsGroups);
   }
 
   private Integer getGroupSize(String groupName) {

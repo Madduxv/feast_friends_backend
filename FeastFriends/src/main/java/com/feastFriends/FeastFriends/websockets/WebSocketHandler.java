@@ -34,21 +34,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   // Yes I know redis would wouk better. I will implement it later.
   // (later has arrived)
-  private final Map<WebSocketSession, String> sessionNameMap = new ConcurrentHashMap<>();
-  private final Map<String, WebSocketSession> nameSessionMap = new ConcurrentHashMap<>();
-  private final Map<WebSocketSession, String> sessionGroupMap = new ConcurrentHashMap<>();
-  private final Map<String, List<WebSocketSession>> groupSessionsMap = new ConcurrentHashMap<>();
-  // private final Map<WebSocketSession, List<String>> requestedGenres = new
-  // ConcurrentHashMap<>();
-  // private final Map<WebSocketSession, List<String>> requestedRestaurants = new
-  // ConcurrentHashMap<>();
-  private final Map<String, Integer> groupDoneMap = new ConcurrentHashMap<>();
-  // private final Map<String, Integer> groupActiveMap = new
-  // ConcurrentHashMap<>();
-
-  // private final RestaurantService restaurantService;
-  // private final UserService userService;
-  // private final RedisService redisService;
 
   @Autowired
   RestaurantService restaurantService = new RestaurantService();
@@ -265,28 +250,44 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
-    // memberNames = SGET groupName
-    // for name:mamberNames ->
-    // sessions.add(GET name.toSession)
-    // for session:sessions ->
-    // sendStringMessage(session, contentType, message)
-    String groupName = sessionGroupMap.get(senderSession);
-    List<WebSocketSession> groupSessions = groupSessionsMap.get(groupName);
-    redisService.sendKCommand("SGET", groupName).thenAccept(response -> {
-      if (response == null) {
-        System.out.println("No response received");
-      }
-    }).exceptionally(ex -> {
-      ex.printStackTrace();
-      return null;
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKVCommand("HGET", senderSession.getId(), "group").thenAccept(groupName -> {
+
+        redisService.addCommandToQueue(() -> {
+          redisService.sendKCommand("SGET", groupName).thenAccept(usernames -> {
+            if (usernames == null && usernames != "") {
+              System.out.println("No response received for SGET command");
+            } else {
+
+              redisService.addCommandToQueue(() -> {
+                for (String username : usernames.split("[,]", 0)) {
+                  redisService.addCommandToQueue(() -> {
+                    redisService.sendKCommand("GET", username).thenAccept(sessionId -> {
+                      if (sessionMap.get(sessionId).isOpen()) {
+                        sendStringMessage(sessionMap.get(sessionId), contentType, message);
+                      }
+
+                    }).exceptionally(ex -> {
+                      ex.printStackTrace();
+                      return null;
+                    });
+                  });
+                }
+              });
+            }
+
+          }).exceptionally(ex -> {
+            ex.printStackTrace();
+            return null;
+          });
+        });
+
+      }).exceptionally(ex -> {
+        ex.printStackTrace();
+        return null;
+      });
     });
-    if (groupSessions != null) {
-      for (WebSocketSession session : groupSessions) {
-        if (session.isOpen()) {
-          sendStringMessage(session, contentType, message);
-        }
-      }
-    }
+
   }
 
   private void addRequestedGenre(WebSocketSession session, String genre) {
@@ -311,11 +312,11 @@ public class WebSocketHandler extends TextWebSocketHandler {
           System.out.println("No response received");
         }
       }).exceptionally(ex -> {
-        // Handle any exceptions that occur during the async operation
         ex.printStackTrace();
         return null;
       });
     });
+
     redisService.addCommandToQueue(() -> {
       String sessionId = session.getId();
       redisService.sendKVCommand("SET", name, sessionId).thenAccept(response -> {
@@ -440,10 +441,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
   }
 
-  private Integer getGroupSize(String groupName) {
-    return groupSessionsMap.get(groupName) != null ? groupSessionsMap.get(groupName).size() : 0;
-  }
-
   private void sendListMessage(WebSocketSession session, String contentType, List<String> message) {
     try {
       ListResponseMessage listResponseMessage = new ListResponseMessage(contentType, message);
@@ -468,26 +465,44 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
   @Override
   public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-    // hget session name
-    // hget session group
-    // del session
-    // rem name
-    // srem group name
-    // if group is empty ->
-    // sdel group
     super.afterConnectionClosed(session, status);
 
-    String groupName = sessionGroupMap.get(session);
-    if (groupName != null) {
-      groupSessionsMap.get(groupName).remove(session);
-      if (groupSessionsMap.get(groupName).isEmpty()) {
-        groupSessionsMap.remove(groupName);
-        groupDoneMap.remove(groupName);
-      }
-    }
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKVCommand("HGET", session.getId(), "name").thenAccept(name -> {
+        if (name != null && name != "") {
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKCommand("REM", name);
+          });
+        }
+      });
+    });
 
-    sessionGroupMap.remove(session);
-    sessionMap.remove(session.getId()); // keep this here
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKVCommand("HGET", session.getId(), "group").thenAccept(groupName -> {
+        if (groupName != null && groupName != "") {
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKVCommand("SREM", groupName, session.getId());
+          });
+
+          redisService.addCommandToQueue(() -> {
+            redisService.sendKCommand("SCARD", groupName).thenAccept(membersLeft -> {
+              if (membersLeft == "0") {
+                redisService.addCommandToQueue(() -> {
+                  redisService.sendKCommand("SREM", groupName);
+                });
+              }
+            });
+          });
+
+        }
+      });
+    });
+
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKCommand("DEL", session.getId());
+    });
+
+    sessionMap.remove(session.getId());
   }
 
   public CompletableFuture<List<String>> getRequestedGenresForGroup(String groupName) {
@@ -597,8 +612,29 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   public List<String> getMatches(String groupName, List<String> requests) {
-    int groupLength = groupSessionsMap.get(groupName).size();
-    return restaurantService.getMatches(requests, groupLength);
+    CompletableFuture<Integer> groupLengthFuture = new CompletableFuture<>();
+
+    redisService.addCommandToQueue(() -> {
+      redisService.sendKCommand("SCARD", groupName).thenAccept(groupSize -> {
+        if (groupSize != null) {
+
+          try {
+            Integer groupLen = Integer.parseInt(groupSize);
+            groupLengthFuture.complete(groupLen);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+
+        }
+      });
+    });
+
+    try {
+      return restaurantService.getMatches(requests, groupLengthFuture.get());
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    return new ArrayList<>();
   }
 
   public CompletableFuture<String[]> getGroupMembers(String groupName) {

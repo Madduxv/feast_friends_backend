@@ -73,6 +73,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     String payload = message.getPayload();
     // Assume payload is a JSON string with action and groupName or message
     // For example:
+
     // {"action": "name", "content": "Maddux"}
     // {"action": "join", "content": "Maddux's Group"}
     // {"action": "addGenre", "content": "ITALIAN"}
@@ -223,30 +224,28 @@ public class WebSocketHandler extends TextWebSocketHandler {
   public void joinGroup(WebSocketSession session, String groupName) {
     String sessionId = session.getId();
 
-    redisService.addCommandToQueue(() -> {
-      redisService.sendKVCommand("HGET", sessionId, "name").thenAccept(name -> {
-        if (name != null) {
-          redisService.addCommandToQueue(() -> {
-            redisService.sendKVCommand("SADD", groupName, name);
-          });
-          redisService.addCommandToQueue(() -> {
-            redisService.sendKVCommand("HGET", sessionId, "group").thenAccept(response -> {
-              if (response != null && response != groupName && response != "(nil)") {
-                redisService.addCommandToQueue(() -> {
-                  redisService.sendKVCommand("SREM", response, name);
-                });
-              }
-              redisService.addCommandToQueue(() -> {
-                redisService.sendKFVCommand("HSET", sessionId, "group", groupName);
-                System.out.printf("Session %s joined %s\n", sessionId, groupName);
-              });
-            });
-          });
-        } else {
-          System.out.println("Error getting sessions name");
-        }
-      });
-    });
+    redisService.addCommandToQueue(() -> redisService.sendKVCommand("HGET", sessionId, "name").thenCompose(name -> {
+      if (name != null) {
+        return redisService.sendKVCommand("SADD", groupName, name)
+            .thenCompose(addResponse -> redisService.sendKVCommand("HGET", sessionId, "group")
+                .thenCompose(oldGroup -> {
+                  if (oldGroup != null && !oldGroup.equals(groupName) && !oldGroup.equals("(nil)")) {
+                    return redisService.sendKVCommand("SREM", oldGroup, name)
+                        .thenCompose(
+                            removeResponse -> redisService.sendKFVCommand("HSET", sessionId, "group", groupName));
+                  } else {
+                    return redisService.sendKFVCommand("HSET", sessionId, "group", groupName);
+                  }
+                }))
+            .thenAccept(finalResponse -> System.out.printf("Session %s joined %s\n", sessionId, groupName));
+      } else {
+        System.out.println("Error getting session's name");
+        return CompletableFuture.completedFuture(null);
+      }
+    }).exceptionally(ex -> {
+      ex.printStackTrace();
+      return null;
+    }));
   }
 
   private void broadcastMessageToGroup(WebSocketSession senderSession, String contentType, String message) {
@@ -305,31 +304,38 @@ public class WebSocketHandler extends TextWebSocketHandler {
   }
 
   private void addSessionName(WebSocketSession session, String name) {
-    redisService.addCommandToQueue(() -> {
-      String sessionId = session.getId();
-      redisService.sendKFVCommand("HSET", sessionId, "name", name).thenAccept(response -> {
-        if (response == null) {
-          System.out.println("No response received");
-        }
-      }).exceptionally(ex -> {
-        ex.printStackTrace();
-        return null;
-      });
-    });
+    String sessionId = session.getId();
 
     redisService.addCommandToQueue(() -> {
-      String sessionId = session.getId();
-      redisService.sendKVCommand("SET", name, sessionId).thenAccept(response -> {
-        if (response == null) {
-          System.out.println("No response received");
-        }
-      }).exceptionally(ex -> {
-        ex.printStackTrace();
-        return null;
-      });
+
+      redisService.sendKFVCommand("HSET", sessionId, "name", name)
+          .thenAccept(response -> {
+            if (response == null || response.contains("ERR")) {
+              System.out.println("Error setting name: " + response);
+
+            } else {
+              System.out.println("Name set successfully for session: " + sessionId);
+              sendStringMessage(session, "name", "");
+            }
+          }).exceptionally(ex -> {
+            ex.printStackTrace();
+            return null;
+          });
     });
-    sendStringMessage(session, "name", "");
   }
+
+  // redisService.addCommandToQueue(() -> {
+  // String sessionId = session.getId();
+  // redisService.sendKVCommand("SET", name, sessionId).thenAccept(response -> {
+  // if (response == null) {
+  // System.out.println("No response received");
+  // }
+  // }).exceptionally(ex -> {
+  // ex.printStackTrace();
+  // return null;
+  // });
+  // });
+  // }
 
   private void addRequestedRestaurant(WebSocketSession session, String restaurant) {
     redisService.addCommandToQueue(() -> {

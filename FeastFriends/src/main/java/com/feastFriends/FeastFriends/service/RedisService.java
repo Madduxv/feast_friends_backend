@@ -2,6 +2,7 @@ package com.feastFriends.feastFriends.service;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+//import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -30,33 +31,61 @@ public class RedisService {
         // dont care
       }
     });
-    testRedis();
+    // testRedis();
 
   }
 
-  Queue<Runnable> commandQueue = new LinkedList<>();
-
-  void executeNextCommand() {
-    if (!commandQueue.isEmpty()) {
-      Runnable command = commandQueue.poll();
-      new Thread(() -> {
-        command.run();
-        executeNextCommand(); // Execute the next command only after the current one completes
-      }).start();
-    }
-  }
+  private Queue<Runnable> commandQueue = new LinkedList<>();
+  private boolean isProcessingCommand = false;
 
   public void addCommandToQueue(Runnable command) {
-    commandQueue.add(() -> {
-      command.run();
-      executeNextCommand(); // Ensure the next command is executed after the current one
-    });
-
-    // Start execution if the queue was empty
-    if (commandQueue.size() == 1) {
-      executeNextCommand();
+    synchronized (commandQueue) {
+      commandQueue.add(command);
+      if (!isProcessingCommand) {
+        isProcessingCommand = true;
+        processNextCommand();
+      }
     }
   }
+
+  private void processNextCommand() {
+    synchronized (commandQueue) {
+      if (!commandQueue.isEmpty()) {
+        Runnable nextCommand = commandQueue.poll();
+        CompletableFuture.runAsync(nextCommand)
+            .thenRun(this::processNextCommand)
+            .exceptionally(ex -> {
+              ex.printStackTrace(); // Handle any exception
+              return null;
+            });
+      } else {
+        isProcessingCommand = false; // Mark that no commands are being processed
+      }
+    }
+  }
+  // void executeNextCommand() {
+  // if (!commandQueue.isEmpty()) {
+  // Runnable command = commandQueue.poll();
+  // new Thread(() -> {
+  // command.run();
+  // executeNextCommand(); // Execute the next command only after the current one
+  // completes
+  // }).start();
+  // }
+  // }
+
+  // public void addCommandToQueue(Runnable command) {
+  // commandQueue.add(() -> {
+  // command.run();
+  // executeNextCommand(); // Ensure the next command is executed after the
+  // current one
+  // });
+  //
+  // // Start execution if the queue was empty
+  // if (commandQueue.size() == 1) {
+  // executeNextCommand();
+  // }
+  // }
 
   public void close() throws Exception {
     in.close();
@@ -65,10 +94,10 @@ public class RedisService {
   }
 
   private void warmUpConnection() throws IOException {
-    out.write("PING\r\n");
+    out.write("PING\n");
     out.flush();
     in.readLine(); // Read the response to ensure the connection is ready
-    out.flush();
+    // out.flush();
   }
 
   private String getResponse() {
@@ -78,6 +107,7 @@ public class RedisService {
         response = in.readLine();
       }
       out.flush();
+      System.out.println("Response: " + response);
       return response;
     } catch (Exception e) {
       e.printStackTrace();
@@ -90,6 +120,7 @@ public class RedisService {
       try {
         // Assuming you write the command to the Redis server
         out.printf("\n%s\n%s\n%s\n%s\n%s\n", command, key, field, start, end);
+        System.out.printf("Command:  %s %s %s %s %s\n", command, key, field, start, end);
         out.flush();
         return getResponse();
       } catch (Exception e) {
@@ -102,18 +133,30 @@ public class RedisService {
   // HGET, HSET, ...
   public CompletableFuture<String> sendKFVCommand(String command, String key, String field, String value) {
     return CompletableFuture.supplyAsync(() -> {
-      out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, value);
-      out.flush();
-      return getResponse();
+      try {
+        out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, value);
+        System.out.printf("Command: %s %s %s %s\n", command, key, field, value);
+        out.flush();
+        return getResponse();
+      } catch (Exception e) {
+        e.printStackTrace();
+        return null;
+      }
     });
   }
 
   // SADD, SREM, ...
   public CompletableFuture<String> sendKVCommand(String command, String key, String value) {
     return CompletableFuture.supplyAsync(() -> {
-      out.printf("\n%s\n%s\n%s\n", command, key, value);
-      out.flush();
-      return getResponse();
+      try {
+        out.printf("\n%s\n%s\n%s\n", command, key, value);
+        System.out.printf("Command:  %s %s %s\n", command, key, value);
+        out.flush();
+        return getResponse();
+      } catch (Exception e) {
+        e.printStackTrace();
+        return null;
+      }
     });
   }
 
@@ -122,13 +165,14 @@ public class RedisService {
     return CompletableFuture.supplyAsync(() -> {
       out.printf("\n%s\n%s\n", command, key);
       out.flush();
+      System.out.printf("Command:  %s %s\n", command, key);
       return getResponse();
     });
   }
 
   public CompletableFuture<String> sendPingCommand() {
     return CompletableFuture.supplyAsync(() -> {
-      out.print("PING\r\n");
+      out.print("PING\n");
       out.flush();
       return getResponse();
     });

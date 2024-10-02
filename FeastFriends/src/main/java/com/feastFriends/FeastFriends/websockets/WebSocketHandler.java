@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PostConstruct;
+import jdk.internal.net.http.common.SequentialScheduler.CompleteRestartableTask;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
@@ -310,13 +311,16 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
       redisService.sendKFVCommand("HSET", sessionId, "name", name)
           .thenAccept(response -> {
-            if (response == null || response.contains("ERR")) {
-              System.out.println("Error setting name: " + response);
+            redisService
+                .addCommandToQueue(() -> redisService.sendKVCommand("SET", name, sessionId).thenAccept(response2 -> {
+                  if (response.trim().equals("OK") && response2.trim().equals("OK")) {
+                    System.out.println("Name set successfully for session: " + sessionId);
+                    sendStringMessage(session, "name", "");
+                  } else {
+                    System.out.println("Error setting name: " + response);
+                  }
+                }));
 
-            } else {
-              System.out.println("Name set successfully for session: " + sessionId);
-              sendStringMessage(session, "name", "");
-            }
           }).exceptionally(ex -> {
             ex.printStackTrace();
             return null;
@@ -531,6 +535,19 @@ public class WebSocketHandler extends TextWebSocketHandler {
       return sessionsDataFuture.thenCompose(sessionsData -> {
         if (sessionsData == null || sessionsData.isEmpty()) {
           return CompletableFuture.completedFuture(genres);
+        }
+        String[] sessionNames = sessionsData.split(",");
+        List<CompletableFuture<Void>> sessionFutures = new ArrayList<>();
+        for (String name : sessionNames) {
+          CompletableFuture<Void> sessions = new CompletableFuture<>();
+
+          redisService.addCommandToQueue(() -> redisService.sendKCommand("GET", name)
+              .thenAccept(thisSession -> {
+                if (thisSession != null && !thisSession.isEmpty()) {
+                  // TODO: Add sessions and then use that for the rest of this function
+                }
+              }));
+
         }
 
         String[] sessions = sessionsData.split(",");

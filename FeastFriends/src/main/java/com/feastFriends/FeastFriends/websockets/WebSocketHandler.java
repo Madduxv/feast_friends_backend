@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PostConstruct;
-import jdk.internal.net.http.common.SequentialScheduler.CompleteRestartableTask;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
@@ -522,9 +521,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
       CompletableFuture<String> sgetFuture = new CompletableFuture<>();
 
       redisService.addCommandToQueue(() -> redisService.sendKCommand("SGET", groupName)
-          .thenAccept(response -> {
-            sgetFuture.complete(response);
-          })
+          .thenAccept(response -> sgetFuture.complete(response))
           .exceptionally(ex -> {
             sgetFuture.completeExceptionally(ex);
             return null;
@@ -534,52 +531,140 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }).thenCompose(sessionsDataFuture -> {
       return sessionsDataFuture.thenCompose(sessionsData -> {
         if (sessionsData == null || sessionsData.isEmpty()) {
-          return CompletableFuture.completedFuture(genres);
+          return CompletableFuture.completedFuture(genres); // No sessions, return early
         }
+
+        // Split the session names and prepare to fetch session data
         String[] sessionNames = sessionsData.split(",");
+        List<String> sessions = new ArrayList<>();
+
+        // Collect all session data fetch tasks
         List<CompletableFuture<Void>> sessionFutures = new ArrayList<>();
         for (String name : sessionNames) {
-          CompletableFuture<Void> sessions = new CompletableFuture<>();
+          CompletableFuture<Void> sessionFuture = new CompletableFuture<>();
 
           redisService.addCommandToQueue(() -> redisService.sendKCommand("GET", name)
               .thenAccept(thisSession -> {
                 if (thisSession != null && !thisSession.isEmpty()) {
-                  // TODO: Add sessions and then use that for the rest of this function
-                }
-              }));
-
-        }
-
-        String[] sessions = sessionsData.split(",");
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-
-        for (String session : sessions) {
-          CompletableFuture<Void> future = new CompletableFuture<>();
-
-          redisService.addCommandToQueue(() -> redisService.sendKFSECommand("LRANGE", session, "genres", "0", "-1")
-              .thenAccept(genresData -> {
-                if (genresData != null && !genresData.isEmpty()) {
-                  synchronized (genres) {
-                    genres.addAll(Arrays.asList(genresData.split(",")));
+                  synchronized (sessions) {
+                    sessions.add(thisSession); // Add to sessions list
                   }
                 }
-                future.complete(null);
+                sessionFuture.complete(null); // Complete this future
               })
               .exceptionally(ex -> {
-                future.completeExceptionally(ex);
+                sessionFuture.completeExceptionally(ex);
                 return null;
               }));
-          futures.add(future);
+
+          sessionFutures.add(sessionFuture); // Add each session future to the list
         }
 
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .thenApply(v -> genres);
+        // Wait for all session fetches to complete
+        return CompletableFuture.allOf(sessionFutures.toArray(new CompletableFuture[0]))
+            .thenCompose(v -> {
+              // Now that all sessions are fetched, we can start processing genres
+              List<CompletableFuture<Void>> genreFutures = new ArrayList<>();
+
+              for (String session : sessions) {
+                CompletableFuture<Void> genreFuture = new CompletableFuture<>();
+
+                redisService
+                    .addCommandToQueue(() -> redisService.sendKFSECommand("LRANGE", session, "genres", "0", "-1")
+                        .thenAccept(genresData -> {
+                          if (genresData != null && !genresData.isEmpty()) {
+                            synchronized (genres) {
+                              genres.addAll(Arrays.asList(genresData.split(",")));
+                            }
+                          }
+                          genreFuture.complete(null); // Complete this genre future
+                        })
+                        .exceptionally(ex -> {
+                          genreFuture.completeExceptionally(ex);
+                          return null;
+                        }));
+
+                genreFutures.add(genreFuture); // Add each genre future to the list
+              }
+
+              // Wait for all genre fetches to complete
+              return CompletableFuture.allOf(genreFutures.toArray(new CompletableFuture[0]))
+                  .thenApply(v2 -> genres);
+            });
       });
     }).exceptionally(ex -> {
       ex.printStackTrace();
-      return genres;
+      return genres; // Return genres even if something fails
     });
   }
+
+  // public CompletableFuture<List<String>> getRequestedGenresForGroup(String
+  // groupName) {
+  // List<String> genres = new ArrayList<>();
+  //
+  // return CompletableFuture.supplyAsync(() -> {
+  // CompletableFuture<String> sgetFuture = new CompletableFuture<>();
+  //
+  // redisService.addCommandToQueue(() -> redisService.sendKCommand("SGET",
+  // groupName)
+  // .thenAccept(response -> {
+  // sgetFuture.complete(response);
+  // })
+  // .exceptionally(ex -> {
+  // sgetFuture.completeExceptionally(ex);
+  // return null;
+  // }));
+  //
+  // return sgetFuture;
+  // }).thenCompose(sessionsDataFuture -> {
+  // return sessionsDataFuture.thenCompose(sessionsData -> {
+  // if (sessionsData == null || sessionsData.isEmpty()) {
+  // return CompletableFuture.completedFuture(genres);
+  // }
+  // String[] sessionNames = sessionsData.split(",");
+  // List<String> sessions = new ArrayList<>();
+  // for (String name : sessionNames) {
+  //
+  // redisService.addCommandToQueue(() -> redisService.sendKCommand("GET", name)
+  // .thenAccept(thisSession -> {
+  // if (thisSession != null && !thisSession.isEmpty()) {
+  // sessions.add(thisSession);
+  // // TODO: Add sessions and then use that for the rest of this function
+  // }
+  // }));
+  //
+  // }
+  //
+  // List<CompletableFuture<Void>> futures = new ArrayList<>();
+  //
+  // for (String session : sessions) {
+  // CompletableFuture<Void> future = new CompletableFuture<>();
+  //
+  // redisService.addCommandToQueue(() -> redisService.sendKFSECommand("LRANGE",
+  // session, "genres", "0", "-1")
+  // .thenAccept(genresData -> {
+  // if (genresData != null && !genresData.isEmpty()) {
+  // synchronized (genres) {
+  // genres.addAll(Arrays.asList(genresData.split(",")));
+  // }
+  // }
+  // future.complete(null);
+  // })
+  // .exceptionally(ex -> {
+  // future.completeExceptionally(ex);
+  // return null;
+  // }));
+  // futures.add(future);
+  // }
+  //
+  // return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+  // .thenApply(v -> genres);
+  // });
+  // }).exceptionally(ex -> {
+  // ex.printStackTrace();
+  // return genres;
+  // });
+  // }
 
   public CompletableFuture<List<String>> getRequestedRestaurantsForGroup(String groupName) {
     List<String> restaurants = new ArrayList<>();

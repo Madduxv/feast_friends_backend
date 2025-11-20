@@ -2,275 +2,127 @@ package com.feastFriends.feastFriends.service;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-//import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
+import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 public class RedisService {
-  private Socket socket;
-  private PrintWriter out;
-  private BufferedReader in;
+  private final Socket socket;
+  private final PrintWriter out;
+  private final BufferedReader in;
 
-  public RedisService(String host, int port) throws Exception {
+  private final Queue<Supplier<CompletableFuture<String>>> commandQueue = new LinkedList<>();
+  private boolean isRunning = false;
+
+  // Stores the result of the last executed command
+  private String lastResult;
+
+  public RedisService(String host, int port) throws IOException {
     this.socket = new Socket(host, port);
     this.out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
     this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    addCommandToQueue(() -> {
+  }
+
+  /**
+   * Add a command to the queue for sequential execution.
+   */
+  public synchronized void addCommandToQueue(Supplier<CompletableFuture<String>> command) {
+    commandQueue.add(() -> {
+      CompletableFuture<String> future = command.get();
+      future.thenAccept(result -> lastResult = result); // Save last result
+      return future;
+    });
+
+    if (!isRunning) {
+      runNextCommand();
+    }
+  }
+
+  /**
+   * Execute commands in the queue sequentially.
+   */
+  private synchronized void runNextCommand() {
+    Supplier<CompletableFuture<String>> command = commandQueue.poll();
+    if (command != null) {
+      isRunning = true;
+      command.get().whenComplete((res, ex) -> {
+        if (ex != null) {
+          ex.printStackTrace();
+        }
+        runNextCommand();
+      });
+    } else {
+      isRunning = false;
+    }
+  }
+
+  /**
+   * Get the result of the last executed command.
+   */
+  public synchronized String getLastResult() {
+    return lastResult;
+  }
+
+  /**
+   * Send a raw command to Redis and return a CompletableFuture for its response.
+   */
+  public CompletableFuture<String> sendCommand(String... args) {
+    return CompletableFuture.supplyAsync(() -> {
       try {
-        warmUpConnection();
-        System.out.println(in.readLine());
+        for (String arg : args) {
+          out.println(arg);
+        }
         out.flush();
+        return readResponse();
       } catch (IOException e) {
-        // dont care
+        e.printStackTrace();
+        return null;
       }
     });
-    // testRedis();
-
   }
 
-  private Queue<Runnable> commandQueue = new LinkedList<>();
-  private boolean isProcessingCommand = false;
-
-  public void addCommandToQueue(Runnable command) {
-    synchronized (commandQueue) {
-      commandQueue.add(command);
-      if (!isProcessingCommand) {
-        isProcessingCommand = true;
-        processNextCommand();
-      }
-    }
+  /**
+   * Read a single line response from Redis.
+   */
+  private String readResponse() throws IOException {
+    String response = in.readLine();
+    return response != null ? response.trim() : null;
   }
 
-  private void processNextCommand() {
-    synchronized (commandQueue) {
-      if (!commandQueue.isEmpty()) {
-        Runnable nextCommand = commandQueue.poll();
-        CompletableFuture.runAsync(nextCommand)
-            .thenRun(this::processNextCommand)
-            .exceptionally(ex -> {
-              ex.printStackTrace(); // Handle any exception
-              return null;
-            });
-      } else {
-        isProcessingCommand = false; // Mark that no commands are being processed
-      }
-    }
+  // --- Convenience wrappers for common commands ---
+
+  public Supplier<CompletableFuture<String>> sendKFVCommand(String command, String key, String field, String value) {
+    return () -> sendCommand(command, key, field, value);
   }
-  // void executeNextCommand() {
-  // if (!commandQueue.isEmpty()) {
-  // Runnable command = commandQueue.poll();
-  // new Thread(() -> {
-  // command.run();
-  // executeNextCommand(); // Execute the next command only after the current one
-  // completes
-  // }).start();
-  // }
-  // }
 
-  // public void addCommandToQueue(Runnable command) {
-  // commandQueue.add(() -> {
-  // command.run();
-  // executeNextCommand(); // Ensure the next command is executed after the
-  // current one
-  // });
-  //
-  // // Start execution if the queue was empty
-  // if (commandQueue.size() == 1) {
-  // executeNextCommand();
-  // }
-  // }
+  public Supplier<CompletableFuture<String>> sendKFSECommand(String command, String key, String field, String upper,
+      String lower) {
+    return () -> sendCommand(command, key, field, upper, lower);
+  }
 
-  public void close() throws Exception {
+  public Supplier<CompletableFuture<String>> sendKVCommand(String command, String key, String value) {
+    return () -> sendCommand(command, key, value);
+  }
+
+  public Supplier<CompletableFuture<String>> sendKCommand(String command, String key) {
+    return () -> sendCommand(command, key);
+  }
+
+  public Supplier<CompletableFuture<String>> sendPingCommand() {
+    return () -> sendCommand("PING");
+  }
+
+  /**
+   * Close the Redis connection.
+   */
+  public void close() throws IOException {
     in.close();
     out.close();
     socket.close();
-  }
-
-  private void warmUpConnection() throws IOException {
-    out.write("PING\n");
-    out.flush();
-    in.readLine(); // Read the response to ensure the connection is ready
-    // out.flush();
-  }
-
-  private String getResponse() {
-    try {
-      String response = null;
-      while (response == null) {
-        response = in.readLine();
-      }
-      out.flush();
-      System.out.println("Response: " + response);
-      return response;
-    } catch (Exception e) {
-      e.printStackTrace();
-      return null;
-    }
-  }
-
-  public CompletableFuture<String> sendKFSECommand(String command, String key, String field, String start, String end) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        // Assuming you write the command to the Redis server
-        out.printf("\n%s\n%s\n%s\n%s\n%s\n", command, key, field, start, end);
-        System.out.printf("Command:  %s %s %s %s %s\n", command, key, field, start, end);
-        out.flush();
-        return getResponse();
-      } catch (Exception e) {
-        e.printStackTrace();
-        return null;
-      }
-    });
-  }
-
-  // HGET, HSET, ...
-  public CompletableFuture<String> sendKFVCommand(String command, String key, String field, String value) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        out.printf("\n%s\n%s\n%s\n%s\n", command, key, field, value);
-        System.out.printf("Command: %s %s %s %s\n", command, key, field, value);
-        out.flush();
-        return getResponse();
-      } catch (Exception e) {
-        e.printStackTrace();
-        return null;
-      }
-    });
-  }
-
-  // SADD, SREM, ...
-  public CompletableFuture<String> sendKVCommand(String command, String key, String value) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        out.printf("\n%s\n%s\n%s\n", command, key, value);
-        System.out.printf("Command:  %s %s %s\n", command, key, value);
-        out.flush();
-        return getResponse();
-      } catch (Exception e) {
-        e.printStackTrace();
-        return null;
-      }
-    });
-  }
-
-  // DEL, ...
-  public CompletableFuture<String> sendKCommand(String command, String key) {
-    return CompletableFuture.supplyAsync(() -> {
-      out.printf("\n%s\n%s\n", command, key);
-      out.flush();
-      System.out.printf("Command:  %s %s\n", command, key);
-      return getResponse();
-    });
-  }
-
-  public CompletableFuture<String> sendPingCommand() {
-    return CompletableFuture.supplyAsync(() -> {
-      out.print("PING\n");
-      out.flush();
-      return getResponse();
-    });
-
-  }
-
-  public void testRedis() {
-    List<String> responses = new ArrayList<String>();
-    String key = "testKey";
-    addCommandToQueue(() -> sendKFVCommand("HSET", key, "name", "Maddux")
-        .thenAccept(response -> {
-          responses.add("HSET: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKVCommand("SADD", "testSet", "testValue1")
-        .thenAccept(response -> {
-          responses.add("SADD: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKVCommand("SADD", "testSet", "testValue2")
-        .thenAccept(response -> {
-          responses.add("SADD: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKCommand("SGET", "testSet")
-        .thenAccept(response -> {
-          responses.add("SGET: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKFVCommand("RPUSH", key, "testField", "testValue1")
-        .thenAccept(response -> {
-          responses.add("RPUSH: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKFVCommand("RPUSH", key, "testField", "testValue2")
-        .thenAccept(response -> {
-          responses.add("RPUSH: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKFVCommand("RPUSH", key, "testField", "testValue3")
-        .thenAccept(response -> {
-          responses.add("RPUSH: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKFSECommand("LRANGE", key, "testField", "0", "-1")
-        .thenAccept(response -> {
-          responses.add("LRANGE: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKCommand("DEL", key)
-        .thenAccept(response -> {
-          responses.add("DEL: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-
-    addCommandToQueue(() -> sendKCommand("SDEL", "testSet")
-        .thenAccept(response -> {
-          responses.add("SDEL: " + response);
-        })
-        .exceptionally(ex -> {
-          ex.printStackTrace();
-          return null;
-        }));
-    System.out.println(responses);
   }
 }
